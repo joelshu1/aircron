@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AirCron{% endblock %}</title>
+    <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+    <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .modal-overlay {
+            backdrop-filter: blur(4px);
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .tab-content.active.schedules-tab {
+            display: block;
+        }
+        .tab-content.active.schedules-tab .flex {
+            display: flex;
+        }
+        .main-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+        @media (min-width: 1400px) {
+            .main-container {
+                max-width: 1400px;
+                padding: 0 3rem;
+            }
+        }
+        @media (max-width: 768px) {
+            .main-container {
+                padding: 0 1rem;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans min-h-screen">
+    <div class="min-h-screen flex flex-col">
+        {% include 'partials/header.html' %}
+        {% include 'partials/nav_tabs.html' %}
+        
+        <div class="flex-1 py-6">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+
+    <!-- Modal Container -->
+    <div id="modal-container"></div>
+
+    <!-- JavaScript -->
+    <script src="/static/app.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html> 

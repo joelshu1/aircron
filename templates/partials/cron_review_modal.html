@@ -1,0 +1,367 @@
+<!-- Cron Review Modal -->
+<div class="modal-overlay fixed inset-0 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
+        <!-- Modal Header -->
+        <div class="bg-blue-600 text-white p-4 flex justify-between items-center">
+            <h2 class="text-lg font-semibold">Review Cron Changes</h2>
+            <button onclick="closeReviewModal()" class="text-white hover:text-gray-200">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Modal Content -->
+        <div class="p-6 overflow-y-auto max-h-[70vh]">
+            <div id="review-content">
+                <!-- Content will be loaded here -->
+                <div class="text-center py-8">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                    <p class="mt-2 text-gray-600">Loading preview...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="bg-gray-50 px-6 py-4 flex justify-between items-center">
+            <button 
+                id="toggle-cron-details"
+                onclick="toggleCronDetails()"
+                class="px-3 py-1 text-sm border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 transition hidden"
+            >
+                Show Cron Details
+            </button>
+            <div class="space-x-3">
+                <button 
+                    onclick="closeReviewModal()" 
+                    class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 transition"
+                >
+                    Cancel
+                </button>
+                <button 
+                    id="apply-changes-btn"
+                    onclick="applyChanges()" 
+                    class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition"
+                    disabled
+                >
+                    Apply Changes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let reviewData = null;
+let showingCronDetails = false;
+
+function closeReviewModal() {
+    document.getElementById('modal-container').innerHTML = '';
+}
+
+function formatJobCard(jobDetail, statusType) {
+    const { zone, job, cron_line, status } = jobDetail;
+    
+    // Status styling
+    let statusClass = '';
+    let statusText = '';
+    if (status === 'will_add') {
+        statusClass = 'bg-green-100 text-green-800';
+        statusText = 'Will Add';
+    } else if (status === 'will_remove') {
+        statusClass = 'bg-red-100 text-red-800';
+        statusText = 'Will Remove';
+    } else {
+        statusClass = 'bg-gray-100 text-gray-600';
+        statusText = 'Unchanged';
+    }
+    
+    // Format days
+    let dayNames = '';
+    if (job && Array.isArray(job.days)) {
+        dayNames = job.days.map(day => {
+            const dayMap = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun' };
+            return dayMap[day];
+        }).join(', ');
+    }
+    
+    // Zone display
+    let zoneDisplay = zone;
+    let zoneHtml = '';
+    if (!zone) {
+        zoneDisplay = 'Unknown Zone';
+        if (status === 'will_remove') {
+            zoneHtml = `<div class='text-sm text-red-700 mb-2'><span class='font-medium'>Zone:</span> <span class='inline-flex items-center'><span class='mr-1'>⚠️</span>Unknown (could not parse from cron line)</span></div>`;
+        } else {
+            zoneHtml = `<div class='text-sm text-blue-600 mb-2'><span class='font-medium'>Zone:</span> Unknown</div>`;
+        }
+    } else if (zone === "All Speakers") {
+        zoneDisplay = "🔊 All Speakers";
+        zoneHtml = `<div class='text-sm text-blue-600 mb-2'><span class='font-medium'>Zone:</span> ${zoneDisplay}</div>`;
+    } else if (typeof zone === 'string' && zone.startsWith('Custom:')) {
+        const speakers = zone.replace('Custom:', '').split(',');
+        zoneDisplay = `🎵 Custom (${speakers.length} speakers)`;
+        zoneHtml = `<div class='text-sm text-blue-600 mb-2'><span class='font-medium'>Zone:</span> ${zoneDisplay}</div>`;
+    } else {
+        zoneDisplay = `📻 ${zone}`;
+        zoneHtml = `<div class='text-sm text-blue-600 mb-2'><span class='font-medium'>Zone:</span> ${zoneDisplay}</div>`;
+    }
+    
+    // Label display
+    let labelHtml = (job && job.label) ? `<span class="font-semibold text-blue-700">${job.label}</span>` : `<span class="font-medium text-gray-800">${job && job.action ? job.action.charAt(0).toUpperCase() + job.action.slice(1) : 'Job'}</span>`;
+    
+    // Raw cron line for unknown zone
+    let rawCronHtml = '';
+    if (!zone && status === 'will_remove' && cron_line) {
+        rawCronHtml = `<div class='mt-2 text-xs text-gray-500'><span class='font-medium'>Raw cron line:</span><pre class='bg-gray-100 rounded p-2 mt-1 overflow-x-auto'>${cron_line}</pre></div>`;
+    }
+    
+    return `
+        <div class="border rounded-lg p-4 mb-3 hover:shadow-md transition ${status === 'will_add' ? 'border-green-200 bg-green-50' : status === 'will_remove' ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}">
+            <div class="flex justify-between items-start">
+                <div class="flex-1">
+                    <div class="flex items-center space-x-2 mb-2">
+                        ${labelHtml}
+                        <span class="text-sm text-gray-500">${job && job.time ? job.time : ''}</span>
+                        <span class="text-xs px-2 py-1 rounded-full ${statusClass}">
+                            ${statusText}
+                        </span>
+                    </div>
+                    
+                    ${zoneHtml}
+                    
+                    ${(zone && typeof zone === 'string' && zone.startsWith('Custom:')) ? `
+                    <div class="text-sm text-blue-600 mb-2">
+                        <span class="font-medium">Speakers:</span>
+                        ${zone.replace('Custom:', '').split(',').map(s => s.trim()).join(', ')}
+                    </div>
+                    ` : ''}
+                    
+                    <div class="text-sm text-gray-600 mb-2">
+                        <span class="font-medium">Days:</span> ${dayNames}
+                    </div>
+                    
+                    ${(job && job.action === 'play' && job.args && job.args.uri) ? `
+                    <div class="text-xs text-gray-500 font-mono truncate">
+                        ${job.args.uri}
+                    </div>
+                    ` : ''}
+                    
+                    ${(job && job.action === 'volume' && job.args && job.args.volume) ? `
+                    <div class="text-xs text-gray-500">
+                        Volume: ${job.args.volume}%
+                    </div>
+                    ` : ''}
+                    
+                    ${rawCronHtml}
+                    
+                    <div class="cron-detail-line mt-2 text-xs font-mono text-gray-400 hidden">
+                        ${cron_line}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function formatJobDiff(diffs) {
+    if (!diffs || !diffs.length) return '';
+    return '<ul class="text-xs text-yellow-800 mt-2 ml-2 list-disc">' +
+        diffs.map(d => {
+            let field = d.field.charAt(0).toUpperCase() + d.field.slice(1);
+            let oldVal = Array.isArray(d.old) ? d.old.join(', ') : d.old;
+            let newVal = Array.isArray(d.new) ? d.new.join(', ') : d.new;
+            if (d.field === 'days') {
+                const dayMap = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun' };
+                oldVal = (d.old || []).map(day => dayMap[day]).join(', ');
+                newVal = (d.new || []).map(day => dayMap[day]).join(', ');
+            }
+            if (d.field === 'args') {
+                oldVal = JSON.stringify(d.old);
+                newVal = JSON.stringify(d.new);
+            }
+            return `<li><b>${field}:</b> <span class="line-through">${oldVal}</span> → <span class="font-bold">${newVal}</span></li>`;
+        }).join('') + '</ul>';
+}
+
+function loadReviewContent() {
+    fetch('/api/cron/preview')
+        .then(response => response.json())
+        .then(data => {
+            reviewData = data;
+            
+            if (data.error) {
+                document.getElementById('review-content').innerHTML = `
+                    <div class="text-red-600 text-center py-8">
+                        <p>Error loading preview: ${data.error}</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let content = '';
+            
+            if (!data.has_changes) {
+                content = `
+                    <div class="text-center py-8">
+                        <div class="text-green-600 text-5xl mb-4">✓</div>
+                        <h3 class="text-lg font-medium text-gray-900 mb-2">All jobs are up to date</h3>
+                        <p class="text-gray-600">No changes needed. All stored jobs are already applied to cron.</p>
+                    </div>
+                `;
+                document.getElementById('apply-changes-btn').disabled = true;
+                document.getElementById('apply-changes-btn').textContent = 'No Changes Needed';
+                document.getElementById('toggle-cron-details').classList.add('hidden');
+            } else {
+                // Group job details by status
+                const jobsToAdd = data.job_details.filter(job => job.status === 'will_add');
+                const jobsToRemove = data.job_details.filter(job => job.status === 'will_remove');
+                const jobsUnchanged = data.job_details.filter(job => job.status === 'unchanged');
+                // Changed jobs
+                const changedJobs = data.changed_jobs || [];
+                content = `
+                    <div class="mb-6">
+                        <h3 class="text-lg font-medium text-gray-900 mb-4">
+                            Summary: ${data.total_changes} change${data.total_changes !== 1 ? 's' : ''} will be made
+                        </h3>
+                        ${changedJobs.length > 0 ? `
+                        <div class="mb-6">
+                            <h4 class="font-medium text-yellow-700 mb-3">
+                                ⚡ ${changedJobs.length} job${changedJobs.length !== 1 ? 's' : ''} will be changed:
+                            </h4>
+                            <div class="space-y-3">
+                                ${changedJobs.map(chg => {
+                                    const oldJob = chg.old_job;
+                                    const newJob = chg.new_job;
+                                    const diffs = chg.diffs;
+                                    return `
+                                    <div class="border rounded-lg p-4 mb-3 border-yellow-300 bg-yellow-50">
+                                        <div class="flex items-center space-x-2 mb-2">
+                                            <span class="font-semibold text-blue-700">${oldJob.label || oldJob.action}</span>
+                                            <span class="text-sm text-gray-500">${oldJob.time}</span>
+                                            <span class="text-xs px-2 py-1 rounded-full bg-yellow-100 text-yellow-800">Changed</span>
+                                        </div>
+                                        <div class="text-sm text-blue-600 mb-2">
+                                            <span class="font-medium">Zone:</span> ${oldJob.zone}
+                                        </div>
+                                        <div class="text-sm text-gray-600 mb-2">
+                                            <span class="font-medium">Days:</span> ${(oldJob.days || []).map(d => ({1:'Mon',2:'Tue',3:'Wed',4:'Thu',5:'Fri',6:'Sat',7:'Sun'}[d])).join(', ')}
+                                        </div>
+                                        ${oldJob.action === 'play' && oldJob.args && oldJob.args.uri ? `<div class="text-xs text-gray-500 font-mono truncate">${oldJob.args.uri}</div>` : ''}
+                                        ${oldJob.action === 'volume' && oldJob.args && oldJob.args.volume ? `<div class="text-xs text-gray-500">Volume: ${oldJob.args.volume}%</div>` : ''}
+                                        ${formatJobDiff(diffs)}
+                                    </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                        ` : ''}
+                        ${jobsToAdd.length > 0 ? `
+                        <div class="mb-6">
+                            <h4 class="font-medium text-green-700 mb-3">
+                                ✓ ${jobsToAdd.length} job${jobsToAdd.length !== 1 ? 's' : ''} will be added:
+                            </h4>
+                            <div class="space-y-3">
+                                ${jobsToAdd.map(job => formatJobCard(job, 'add')).join('')}
+                            </div>
+                        </div>
+                        ` : ''}
+                        ${jobsToRemove.length > 0 ? `
+                        <div class="mb-6">
+                            <h4 class="font-medium text-red-700 mb-3">
+                                ✗ ${jobsToRemove.length} job${jobsToRemove.length !== 1 ? 's' : ''} will be removed:
+                            </h4>
+                            <div class="space-y-3">
+                                ${jobsToRemove.map(job => formatJobCard(job, 'remove')).join('')}
+                            </div>
+                        </div>
+                        ` : ''}
+                        ${jobsUnchanged.length > 0 ? `
+                        <div class="mb-6">
+                            <h4 class="font-medium text-gray-700 mb-3">
+                                → ${jobsUnchanged.length} job${jobsUnchanged.length !== 1 ? 's' : ''} will remain unchanged:
+                            </h4>
+                            <div class="space-y-3">
+                                ${jobsUnchanged.map(job => formatJobCard(job, 'unchanged')).join('')}
+                            </div>
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+                
+                document.getElementById('apply-changes-btn').disabled = false;
+                document.getElementById('apply-changes-btn').textContent = `Apply ${data.total_changes} Change${data.total_changes !== 1 ? 's' : ''}`;
+                document.getElementById('toggle-cron-details').classList.remove('hidden');
+            }
+
+            document.getElementById('review-content').innerHTML = content;
+        })
+        .catch(error => {
+            document.getElementById('review-content').innerHTML = `
+                <div class="text-red-600 text-center py-8">
+                    <p>Error loading preview: ${error.message}</p>
+                </div>
+            `;
+        });
+}
+
+function toggleCronDetails() {
+    showingCronDetails = !showingCronDetails;
+    const detailLines = document.querySelectorAll('.cron-detail-line');
+    const toggleBtn = document.getElementById('toggle-cron-details');
+    
+    detailLines.forEach(line => {
+        if (showingCronDetails) {
+            line.classList.remove('hidden');
+        } else {
+            line.classList.add('hidden');
+        }
+    });
+    
+    toggleBtn.textContent = showingCronDetails ? 'Hide Cron Details' : 'Show Cron Details';
+}
+
+function applyChanges() {
+    const btn = document.getElementById('apply-changes-btn');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2 inline-block"></span>Applying...';
+    
+    fetch('/api/cron/apply', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.ok) {
+                // Success - close modal and refresh status
+                closeReviewModal();
+                
+                // Show success message
+                document.getElementById('status-message').innerHTML = 
+                    '<div class="text-green-200">✓ Successfully applied to crontab</div>';
+                setTimeout(() => {
+                    document.getElementById('status-message').innerHTML = '';
+                }, 3000);
+                
+                // Refresh cron status
+                if (typeof checkCronStatus === 'function') {
+                    checkCronStatus();
+                }
+            } else {
+                throw new Error(data.error || 'Failed to apply changes');
+            }
+        })
+        .catch(error => {
+            // Error - show error and restore button
+            btn.disabled = false;
+            btn.textContent = originalText;
+            
+            document.getElementById('status-message').innerHTML = 
+                `<div class="text-red-200">✗ Error: ${error.message}</div>`;
+            setTimeout(() => {
+                document.getElementById('status-message').innerHTML = '';
+            }, 5000);
+        });
+}
+
+// Load content when modal opens
+loadReviewContent();
+</script> 

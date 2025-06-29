@@ -1,0 +1,36 @@
+<!-- Main Content Area -->
+<main class="flex-1 min-w-0">
+    <div class="bg-white rounded-lg shadow-lg h-full">
+        <!-- Schedules Header -->
+        <div class="p-6 border-b flex flex-wrap justify-between items-center gap-4">
+            <h2 class="text-xl font-semibold min-w-0">
+                Schedules for <span id="current-zone-name">{{ current_zone }}</span>
+            </h2>
+            <div class="flex flex-wrap gap-2">
+                <button 
+                    id="add-schedule-btn"
+                    hx-get="/modal/add/{{ current_zone }}"
+                    hx-target="#modal-container"
+                    hx-swap="innerHTML"
+                    class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition whitespace-nowrap"
+                >
+                    + Add Schedule
+                </button>
+                <button 
+                    id="make-composite-btn"
+                    onclick="makeCompositeSchedule()"
+                    class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition hidden whitespace-nowrap"
+                >
+                    Make Schedule for Selected Speakers
+                </button>
+            </div>
+        </div>
+
+        <!-- Schedules Content -->
+        <div id="schedules-content" class="p-6">
+            {% set zone = current_zone %}
+            {% set jobs = current_jobs %}
+            {% include 'partials/jobs_list.html' %}
+        </div>
+    </div>
+</main> 

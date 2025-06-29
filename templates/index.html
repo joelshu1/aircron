@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+
+{% block content %}
+    {% include 'partials/schedules_tab.html' %}
+    {% include 'partials/cron_jobs_tab.html' %}
+    {% include 'partials/view_schedule_tab.html' %}
+    {% include 'partials/playlists_tab.html' %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // HTMX configuration
+    htmx.config.defaultSwapStyle = 'innerHTML';
+    
+    // Track current zone and tab
+    let currentZone = '{{ current_zone }}';
+    let currentTab = 'schedules';
+    let cronStatus = { needs_apply: false };
+    let selectedSpeakers = [];
+    
+    // Tab switching function
+    function switchTab(tabName) {
+        // Update tab buttons
+        document.querySelectorAll('[id^="tab-"]').forEach(btn => {
+            btn.classList.remove('border-blue-500', 'text-blue-600', 'bg-blue-50');
+            btn.classList.add('border-transparent', 'text-gray-600');
+        });
+        
+        // Activate current tab button
+        const activeBtn = document.getElementById(`tab-${tabName}`);
+        activeBtn.classList.remove('border-transparent', 'text-gray-600');
+        activeBtn.classList.add('border-blue-500', 'text-blue-600', 'bg-blue-50');
+        
+        // Update tab content - hide all tabs first
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.remove('active');
+            content.classList.remove('schedules-tab');
+        });
+        
+        // Show the selected tab
+        const selectedTab = document.getElementById(`tab-content-${tabName}`);
+        selectedTab.classList.add('active');
+        if (tabName === 'schedules') {
+            selectedTab.classList.add('schedules-tab');
+        }
+        
+        currentTab = tabName;
+        
+        // Load content for specific tabs
+        if (tabName === 'cron-jobs') {
+            loadCronJobsContent();
+        } else if (tabName === 'playlists') {
+            loadPlaylistsContent();
+        }
+    }
+    
+    function updateCurrentZone(zoneName) {
+        currentZone = zoneName;
+        document.getElementById('current-zone-name').innerText = zoneName;
+        
+        // Update the 'Add Schedule' button's context
+        if (window.AirCron && window.AirCron.updateAddScheduleButton) {
+            window.AirCron.updateAddScheduleButton(zoneName);
+        }
+        
+        // Refresh the jobs list for the new zone
+        if (window.AirCron && window.AirCron.refreshZone) {
+            window.AirCron.refreshZone(zoneName);
+        }
+    }
+    
+    // Load cron jobs content
+    function loadCronJobsContent() {
+        fetch('/api/cron/jobs')
+            .then(response => response.json())
+            .then(data => {
+                const container = document.getElementById('cron-jobs-content');
+                
+                if (!data.has_jobs || data.total_jobs === 0) {
+                    container.innerHTML = `
+                        <div class="text-center text-gray-500 py-12">
+                            <div class="text-6xl mb-4">📝</div>
+                            <h2 class="text-xl font-medium mb-2">No Active Cron Jobs</h2>
+                            <p class="text-gray-600 mb-4">There are currently no schedules applied to cron.</p>
+                            <button onclick="switchTab('schedules')" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition">
+                                Create Schedules
+                            </button>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                let html = `
+                    <div class="bg-white rounded-lg shadow-lg">
+                        <div class="p-6 border-b flex justify-between items-center">
+                            <h2 class="text-xl font-semibold">Active Cron Jobs (${data.total_jobs} total)</h2>
+                            <button 
+                                onclick="showCronReviewModal()"
+                                class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded transition"
+                            >
+                                Apply Changes
+                            </button>
+                        </div>
+                        <div class="p-6 space-y-6">
+                `;
+                
+                for (const [zone, jobs] of Object.entries(data.zones)) {
+                    let zoneDisplay = zone;
+                    if (zone === "All Speakers") {
+                        zoneDisplay = "🔊 All Speakers";
+                    } else if (zone.startsWith('Custom:')) {
+                        const speakers = zone.replace('Custom:', '').split(',');
+                        zoneDisplay = `🎵 Custom (${speakers.length} speakers)`;
+                    } else {
+                        zoneDisplay = `📻 ${zone}`;
+                    }
+                    
+                    html += `
+                        <div class="border rounded-lg p-4">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="font-medium text-gray-900">${zoneDisplay} (${jobs.length} job${jobs.length !== 1 ? 's' : ''})</h3>
+                                <button onclick="switchTab('schedules'); updateCurrentZone('${zone}')" class="text-sm text-blue-500 hover:text-blue-700">
+                                    Edit Zone →
+                                </button>
+                            </div>
+                            <div class="space-y-3">
+                    `;
+                    
+                    jobs.forEach(job => {
+                        const dayNames = job.days.map(day => {
+                            const dayMap = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun' };
+                            return dayMap[day];
+                        }).join(', ');
+                        
+                        html += `
+                            <div class="bg-gray-50 rounded p-3">
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <div class="font-medium text-gray-900">${job.time} on ${dayNames}</div>
+                                        <div class="text-sm text-gray-600 mt-1">
+                                            Playlist: ${job.playlist_name || 'Default'}
+                                            ${job.volume ? ` • Volume: ${job.volume}%` : ''}
+                                        </div>
+                                    </div>
+                                    <div class="text-xs text-gray-500">${job.id.slice(0, 8)}</div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    html += `
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                html += `
+                        </div>
+                    </div>
+                `;
+                
+                container.innerHTML = html;
+            })
+            .catch(error => {
+                console.error('Error loading cron jobs:', error);
+                document.getElementById('cron-jobs-content').innerHTML = `
+                    <div class="text-center text-red-500 py-12">
+                        <div class="text-6xl mb-4">❌</div>
+                        <h2 class="text-xl font-medium mb-2">Error Loading Cron Jobs</h2>
+                        <p class="text-red-600">Failed to load cron job data.</p>
+                    </div>
+                `;
+            });
+    }
+    
+    // Load playlists content
+    function loadPlaylistsContent() {
+        fetch('/api/playlists')
+            .then(response => response.json())
+            .then(data => {
+                const container = document.getElementById('playlists-content');
+                
+                if (!data.playlists || data.playlists.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center text-gray-500 py-12">
+                            <div class="text-6xl mb-4">🎵</div>
+                            <h2 class="text-xl font-medium mb-2">No Saved Playlists</h2>
+                            <p class="text-gray-600 mb-4">Create your first playlist to get started.</p>
+                            <button onclick="openAddPlaylistModal()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition">
+                                Create Playlist
+                            </button>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                let html = `
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full bg-white">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Playlist Name</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Spotify URI</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                `;
+                
+                data.playlists.forEach(playlist => {
+                    const createdDate = playlist.created_at ? new Date(playlist.created_at).toLocaleDateString() : 'Unknown';
+                    const description = playlist.description || '<span class="text-gray-400">No description</span>';
+                    
+                    html += `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm font-medium text-gray-900">${playlist.name}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-normal text-sm text-gray-600">${description}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="font-mono bg-gray-100 p-2 rounded text-xs break-all">${playlist.uri}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${createdDate}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <div class="flex items-center justify-end space-x-3">
+                                    <button onclick="editPlaylist('${playlist.id}')" class="text-blue-600 hover:text-blue-900 transition">Edit</button>
+                                    <button onclick="deletePlaylist('${playlist.id}')" class="text-red-600 hover:text-red-900 transition">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                
+                container.innerHTML = html;
+            })
+            .catch(error => {
+                console.error('Error loading playlists:', error);
+                document.getElementById('playlists-content').innerHTML = `
+                    <div class="text-center text-red-500 py-12">
+                        <div class="text-6xl mb-4">❌</div>
+                        <h2 class="text-xl font-medium mb-2">Error Loading Playlists</h2>
+                        <p class="text-red-600">Failed to load playlist data. Check console for details.</p>
+                    </div>
+                `;
+            });
+    }
+    
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        // Load initial data
+        loadSpeakerList();
+        updateCurrentZone(currentZone);
+        
+        // Set initial tab content heights
+        setTimeout(() => {
+            adjustTabContentHeight();
+        }, 100);
+    });
+    
+    function adjustTabContentHeight() {
+        const tabContents = document.querySelectorAll('.tab-content');
+        const windowHeight = window.innerHeight;
+        const headerHeight = document.querySelector('header').offsetHeight;
+        const navHeight = document.querySelector('.bg-white.shadow.border-b').offsetHeight;
+        const availableHeight = windowHeight - headerHeight - navHeight - 48; // 48px for padding
+        
+        tabContents.forEach(content => {
+            content.style.minHeight = `${availableHeight}px`;
+        });
+    }
+    
+    window.addEventListener('resize', adjustTabContentHeight);
+</script>
+{% endblock %} 

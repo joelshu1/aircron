@@ -1,0 +1,25 @@
+<!-- Playlists Tab -->
+<div id="tab-content-playlists" class="tab-content h-full">
+    <div class="main-container h-full">
+        <div class="bg-white rounded-lg shadow-lg h-full">
+            <div class="p-6 border-b flex justify-between items-center">
+                <h2 class="text-xl font-semibold">Saved Playlists</h2>
+                <button 
+                    hx-get="/modal/playlist/add"
+                    hx-target="#modal-container"
+                    hx-swap="innerHTML"
+                    class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition"
+                >
+                    + Add Playlist
+                </button>
+            </div>
+            <div id="playlists-content" class="p-6 flex-1 overflow-y-auto">
+                <!-- Will be loaded dynamically -->
+                <div class="text-center py-8">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                    <p class="mt-2 text-gray-600">Loading playlists...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div> 

@@ -1,0 +1,361 @@
+<!-- Modal Overlay -->
+<div class="fixed inset-0 modal-overlay flex items-center justify-center z-50" 
+     onclick="if(event.target === this) closeModal()">
+    
+    <!-- Modal Content -->
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+        <h3 class="text-lg font-semibold mb-4">
+            {% if action == 'edit' %}Edit Schedule{% else %}Add Schedule{% endif %}
+        </h3>
+        
+        <form id="job-form" 
+              data-zone="{{ zone }}"
+              {% if action == 'edit' %}
+              data-method="PUT"
+              data-url="/api/jobs/{{ zone }}/{{ job.id }}"
+              data-initial-action="{{ job.action }}"
+              {% else %}
+              data-method="POST"
+              data-url="/api/jobs/{{ zone }}"
+              {% endif %}>
+            
+            <!-- Label Input -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Label (Display Name)</label>
+                <input type="text" name="label" maxlength="60" placeholder="e.g. Start the day" value="{% if action == 'edit' and job.label %}{{ job.label }}{% endif %}" class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                <div class="text-xs text-gray-500 mt-1">How this job will be shown in the UI (e.g. 'Morning Jazz')</div>
+            </div>
+            
+            <!-- Speaker Multi-Select -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Speakers</label>
+                <div class="max-h-32 overflow-y-auto border rounded bg-gray-50 px-2 py-1 flex flex-col gap-1">
+                    {% set preselected = [] %}
+                    {% if zone == 'All Speakers' %}
+                        {% set preselected = ['All Speakers'] %}
+                    {% elif zone.startswith('Custom:') %}
+                        {% set preselected = zone.replace('Custom:', '').split(',') %}
+                    {% else %}
+                        {% set preselected = [zone] %}
+                    {% endif %}
+                    {% for speaker in speakers %}
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" name="speakers" value="{{ speaker }}" {% if speaker in preselected %}checked{% endif %}>
+                        <span>{{ speaker }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                <div class="text-xs text-gray-500 mt-1">Select one or more speakers for this schedule</div>
+            </div>
+            
+            <!-- Days Selection -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Days</label>
+                <div class="grid grid-cols-7 gap-1">
+                    {% set day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] %}
+                    {% for i in range(7) %}
+                    <label class="flex flex-col items-center cursor-pointer">
+                        <input type="checkbox" 
+                               name="days" 
+                               value="{{ i + 1 }}"
+                               {% if action == 'edit' and (i + 1) in job.days %}checked{% endif %}
+                               class="sr-only peer">
+                        <div class="w-10 h-8 bg-gray-200 rounded text-xs flex items-center justify-center
+                                   peer-checked:bg-blue-500 peer-checked:text-white transition">
+                            {{ day_names[i] }}
+                        </div>
+                    </label>
+                    {% endfor %}
+                </div>
+                <div class="text-xs text-gray-500 mt-1">Select one or more days</div>
+            </div>
+            
+            <!-- Time Input -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Time</label>
+                <input type="time" 
+                       name="time" 
+                       {% if action == 'edit' %}value="{{ job.time }}"{% endif %}
+                       required
+                       class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            
+            <!-- Action Selection -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Action</label>
+                <select name="action" 
+                        onchange="toggleActionFields(this.value)"
+                        required
+                        class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">Select action...</option>
+                    <option value="play" {% if action == 'edit' and job.action == 'play' %}selected{% endif %}>Play Playlist</option>
+                    <option value="resume" {% if action == 'edit' and job.action == 'resume' %}selected{% endif %}>Resume Last</option>
+                    <option value="pause" {% if action == 'edit' and job.action == 'pause' %}selected{% endif %}>Pause</option>
+                    <option value="volume" {% if action == 'edit' and job.action == 'volume' %}selected{% endif %}>Set Volume</option>
+                </select>
+            </div>
+            
+            <!-- Playlist URI (for play action) -->
+            <div id="uri-field" class="mb-4" 
+                 data-show-for="play"
+                 {% if not (action == 'edit' and job.action == 'play') %}style="display: none"{% endif %}>
+                
+                <label class="block text-sm font-medium text-gray-700 mb-1">Playlist/Track</label>
+                
+                <!-- Saved Playlists Picker -->
+                <div class="mb-2">
+                    <select id="playlist-picker" onchange="selectSavedPlaylist(this.value)" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">Select a saved playlist...</option>
+                        <!-- Will be populated by JavaScript -->
+                    </select>
+                </div>
+                
+                <!-- Manual URI Input -->
+                <div class="text-xs text-gray-500 mb-1">Or enter URI manually:</div>
+                <input type="text" 
+                       name="uri" 
+                       {% if action == 'edit' and job.args.uri %}value="{{ job.args.uri }}"{% endif %}
+                       placeholder="spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"
+                       class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <div class="text-xs text-gray-500 mt-1">Paste Spotify playlist, album, or track URI</div>
+            </div>
+            
+            <!-- Volume Level (for volume action) -->
+            <div id="volume-field" class="mb-4" 
+                 data-show-for="volume"
+                 {% if not (action == 'edit' and job.action == 'volume') %}style="display: none"{% endif %}>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Volume Level</label>
+                <input type="range" 
+                       name="volume" 
+                       min="0" 
+                       max="100" 
+                       {% if action == 'edit' and job.args.volume %}value="{{ job.args.volume }}"{% else %}value="50"{% endif %}
+                       oninput="document.getElementById('volume-display').textContent = this.value + '%'"
+                       class="w-full">
+                <div class="text-center text-sm text-gray-600 mt-1">
+                    <span id="volume-display">
+                        {% if action == 'edit' and job.args.volume %}{{ job.args.volume }}%{% else %}50%{% endif %}
+                    </span>
+                </div>
+            </div>
+            
+            <!-- Buttons -->
+            <div class="flex justify-end space-x-3 pt-4 border-t">
+                <button type="button" 
+                        onclick="closeModal()"
+                        class="px-4 py-2 text-gray-600 hover:text-gray-800 transition">
+                    Cancel
+                </button>
+                <button type="submit" 
+                        class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded transition">
+                    <span id="saving-indicator" class="hidden">Saving...</span>
+                    <span id="save-text">
+                        {% if action == 'edit' %}Update{% else %}Save{% endif %}
+                    </span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function closeModal() {
+    document.getElementById('modal-container').innerHTML = '';
+}
+
+function toggleActionFields(action) {
+    const uriField = document.getElementById('uri-field');
+    const volumeField = document.getElementById('volume-field');
+    const uriInput = uriField.querySelector('input[name="uri"]');
+    const volumeInput = volumeField.querySelector('input[name="volume"]');
+    
+    // Hide all fields first
+    uriField.style.display = 'none';
+    volumeField.style.display = 'none';
+    uriInput.required = false;
+    volumeInput.required = false;
+    
+    // Show relevant field
+    if (action === 'play') {
+        uriField.style.display = 'block';
+        uriInput.required = true;
+    } else if (action === 'volume') {
+        volumeField.style.display = 'block';
+        volumeInput.required = true;
+    }
+}
+
+// Initialize for edit mode
+const form = document.getElementById('job-form');
+const initialAction = form.dataset.initialAction;
+if (initialAction) {
+    toggleActionFields(initialAction);
+}
+
+// Load saved playlists for picker
+function loadSavedPlaylists() {
+    fetch('/api/playlists')
+        .then(response => response.json())
+        .then(data => {
+            const picker = document.getElementById('playlist-picker');
+            if (picker && data.playlists) {
+                // Clear existing options except first
+                picker.innerHTML = '<option value="">Select a saved playlist...</option>';
+                
+                // Add playlists
+                data.playlists.forEach(playlist => {
+                    const option = document.createElement('option');
+                    option.value = playlist.uri;
+                    option.textContent = playlist.name;
+                    picker.appendChild(option);
+                });
+            }
+        })
+        .catch(error => console.error('Error loading playlists:', error));
+}
+
+// Function to select a saved playlist
+function selectSavedPlaylist(uri) {
+    if (uri) {
+        const uriInput = document.querySelector('input[name="uri"]');
+        if (uriInput) {
+            uriInput.value = uri;
+        }
+    }
+}
+
+// Load playlists when modal opens
+loadSavedPlaylists();
+
+// Handle form submission (override default to handle speakers multi-select)
+form.addEventListener('submit', function(evt) {
+    evt.preventDefault();
+    const formData = new FormData(form);
+    // Collect checked days
+    const daysChecked = Array.from(formData.getAll('days')).map(day => parseInt(day));
+    if (daysChecked.length === 0) {
+        alert('Please select at least one day');
+        return;
+    }
+    // Collect checked speakers
+    const speakersChecked = Array.from(formData.getAll('speakers'));
+    if (speakersChecked.length === 0) {
+        alert('Please select at least one speaker');
+        return;
+    }
+    // Determine zone string
+    let targetZone = '';
+    if (speakersChecked.length === 1) {
+        targetZone = speakersChecked[0];
+    } else if (speakersChecked.includes('All Speakers')) {
+        targetZone = 'All Speakers';
+    } else {
+        targetZone = 'Custom:' + speakersChecked.join(',');
+    }
+    // Build request data
+    const requestData = {
+        days: daysChecked,
+        time: formData.get('time'),
+        action: formData.get('action'),
+        args: {}
+    };
+    // Add action-specific args
+    if (requestData.action === 'play') {
+        const uri = formData.get('uri');
+        if (!uri) {
+            alert('Please enter a Spotify URI');
+            return;
+        }
+        requestData.args.uri = uri;
+    } else if (requestData.action === 'volume') {
+        requestData.args.volume = parseInt(formData.get('volume'));
+    }
+    // Add label
+    requestData.label = formData.get('label') || '';
+    // Show saving indicator
+    document.getElementById('saving-indicator').classList.remove('hidden');
+    document.getElementById('save-text').classList.add('hidden');
+    // Make API request
+    fetch(`/api/jobs/${encodeURIComponent(targetZone)}` + (form.dataset.method === 'PUT' ? `/${form.dataset.url.split('/').pop()}` : ''), {
+        method: form.dataset.method,
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData)
+    })
+    .then(response => {
+        if (response.ok) {
+            // Close modal on success
+            document.getElementById('modal-container').innerHTML = '';
+            // Refresh current zone view to show new job
+            if (targetZone) {
+                htmx.ajax('GET', '/zone/' + encodeURIComponent(targetZone), '#schedules-content');
+                // Update current zone tracking
+                if (typeof updateCurrentZone === 'function') {
+                    updateCurrentZone(targetZone);
+                }
+            }
+            // Show success message
+            if (window.AirCron && window.AirCron.showNotification) {
+                window.AirCron.showNotification('Schedule saved successfully');
+            }
+            // Refresh cron status
+            if (typeof checkCronStatus === 'function') {
+                checkCronStatus();
+            }
+        } else {
+            return response.json().then(data => {
+                throw new Error(data.error || 'Unknown error occurred');
+            });
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error.message);
+        // Hide saving indicator
+        document.getElementById('saving-indicator').classList.add('hidden');
+        document.getElementById('save-text').classList.remove('hidden');
+    });
+});
+
+// Speaker multi-select logic
+function updateSpeakerCheckboxes() {
+    const allSpeakersBox = document.querySelector('input[name="speakers"][value="All Speakers"]');
+    const otherBoxes = Array.from(document.querySelectorAll('input[name="speakers"]')).filter(cb => cb.value !== 'All Speakers');
+    if (!allSpeakersBox) return;
+    if (allSpeakersBox.checked) {
+        otherBoxes.forEach(cb => {
+            cb.checked = false;
+            cb.disabled = true;
+            cb.parentElement.classList.add('opacity-50');
+        });
+    } else {
+        otherBoxes.forEach(cb => {
+            cb.disabled = false;
+            cb.parentElement.classList.remove('opacity-50');
+        });
+    }
+    // If all other speakers are checked, auto-check All Speakers
+    const allChecked = otherBoxes.length > 0 && otherBoxes.every(cb => cb.checked);
+    if (allChecked) {
+        allSpeakersBox.checked = true;
+        otherBoxes.forEach(cb => {
+            cb.checked = false;
+            cb.disabled = true;
+            cb.parentElement.classList.add('opacity-50');
+        });
+    }
+}
+
+// Attach listeners on modal open
+function attachSpeakerListeners() {
+    const speakerBoxes = document.querySelectorAll('input[name="speakers"]');
+    speakerBoxes.forEach(cb => {
+        cb.addEventListener('change', updateSpeakerCheckboxes);
+    });
+    updateSpeakerCheckboxes();
+}
+
+// Run on modal open
+attachSpeakerListeners();
+</script> 
