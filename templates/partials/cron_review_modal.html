@@ -328,22 +328,45 @@ function applyChanges() {
     btn.innerHTML = '<span class="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2 inline-block"></span>Applying...';
     
     fetch('/api/cron/apply', { method: 'POST' })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                // Handle non-200 status codes
+                return response.json().then(data => {
+                    throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
+                });
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.ok) {
                 // Success - close modal and refresh status
                 closeReviewModal();
                 
                 // Show success message
-                document.getElementById('status-message').innerHTML = 
-                    '<div class="text-green-200">✓ Successfully applied to crontab</div>';
-                setTimeout(() => {
-                    document.getElementById('status-message').innerHTML = '';
-                }, 3000);
+                const statusEl = document.getElementById('status-message');
+                if (statusEl) {
+                    statusEl.innerHTML = '<div class="text-green-200">✓ Successfully applied to crontab</div>';
+                    setTimeout(() => {
+                        statusEl.innerHTML = '';
+                    }, 3000);
+                }
                 
                 // Refresh cron status
                 if (typeof checkCronStatus === 'function') {
                     checkCronStatus();
+                }
+                
+                // Refresh the current zone's job list to update status indicators
+                if (window.AirCron && window.AirCron.refreshZone && window.currentZone) {
+                    window.AirCron.refreshZone(window.currentZone);
+                }
+                
+                // Refresh Active Cron Jobs tab if it's currently shown
+                const activeTab = document.querySelector('.tab-content:not([style*="display: none"])');
+                if (activeTab && activeTab.id === 'tab-content-cron-jobs') {
+                    if (typeof loadCronJobsContent === 'function') {
+                        loadCronJobsContent();
+                    }
                 }
             } else {
                 throw new Error(data.error || 'Failed to apply changes');
@@ -354,11 +377,18 @@ function applyChanges() {
             btn.disabled = false;
             btn.textContent = originalText;
             
-            document.getElementById('status-message').innerHTML = 
-                `<div class="text-red-200">✗ Error: ${error.message}</div>`;
-            setTimeout(() => {
-                document.getElementById('status-message').innerHTML = '';
-            }, 5000);
+            console.error('Error applying cron changes:', error);
+            
+            const statusEl = document.getElementById('status-message');
+            if (statusEl) {
+                statusEl.innerHTML = `<div class="text-red-200">✗ Error: ${error.message}</div>`;
+                setTimeout(() => {
+                    statusEl.innerHTML = '';
+                }, 5000);
+            } else {
+                // Fallback if status-message element doesn't exist
+                alert(`Error applying changes: ${error.message}`);
+            }
         });
 }
 

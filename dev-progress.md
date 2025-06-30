@@ -756,3 +756,166 @@ The application now provides a professional, intuitive interface that eliminates
 - All actions are accessible and error states are clear.
 
 **This release marks a major step toward a fully transparent, user-friendly, and professional schedule management experience in AirCron.**
+
+## 2025-06-30 - Status Indicator Fix: Create Schedules Page Shows Correct Applied/Pending Status
+
+**Status**: Fixed incorrect job status display in Create Schedules page
+
+**Critical Issue Fixed**:
+
+- ✅ **Create Schedules Status Bug**: Fixed all jobs showing "Pending Apply" regardless of actual cron status
+  - **Root Cause**: `templates/partials/jobs_list.html` had hardcoded "Pending Apply" status badge
+  - **Problem**: Users couldn't distinguish between jobs that were applied to cron vs those that needed applying
+  - **Solution**: Updated backend to include dynamic status information for each job
+  - **Implementation**:
+    - Modified `app/views.py` `zone_view()` and `index()` functions to check actual cron status
+    - Added cron comparison logic to determine if each job is applied or pending
+    - Updated `jobs_list.html` template to use dynamic status with color coding
+    - Added auto-refresh functionality after applying changes via modal
+
+**Technical Implementation**:
+
+1. **Backend Status Logic** (`app/views.py`):
+
+   - Added `_normalize_cron_line()` helper function for consistent cron line comparison
+   - Enhanced `zone_view()` function to read current crontab and compare with stored jobs
+   - Added status field ('applied', 'pending', 'unknown') to each job dict before rendering
+   - Applied same logic to `index()` function for initial page load
+
+2. **Frontend Template Updates** (`templates/partials/jobs_list.html`):
+
+   - Replaced hardcoded "Pending Apply" badge with conditional status display
+   - Green "Applied" badge for jobs that match cron entries
+   - Yellow "Pending Apply" badge for jobs not yet in cron
+   - Gray "Unknown" badge for edge cases
+
+3. **UI Refresh Logic** (`templates/partials/cron_review_modal.html`):
+   - Added automatic zone refresh after successful cron apply
+   - Global `currentZone` variable sync for proper refresh targeting
+   - Status indicators update immediately after applying changes
+
+**User Experience Improvements**:
+
+- ✅ **Accurate Status Display**: Jobs now correctly show "Applied" (green) when in cron, "Pending Apply" (yellow) when not
+- ✅ **Real-Time Updates**: Status indicators refresh automatically after applying changes
+- ✅ **Visual Clarity**: Color-coded badges make it immediately obvious which jobs need attention
+- ✅ **Workflow Transparency**: Users can see exactly what needs to be applied before using the Apply modal
+
+**Verification Tests Passed**:
+
+1. ✅ **Applied Jobs Display**: Existing jobs in cron show green "Applied" status
+2. ✅ **Pending Jobs Display**: New jobs show yellow "Pending Apply" status
+3. ✅ **Status Updates**: After applying via modal, pending jobs update to "Applied" status
+4. ✅ **Cross-Tab Consistency**: Status is consistent between Create Schedules and Active Cron Jobs tabs
+5. ✅ **Auto-Refresh**: UI refreshes automatically after cron apply operations
+
+**Result**: The Create Schedules page now provides accurate, real-time feedback about which jobs are active in cron vs which need to be applied, eliminating user confusion about schedule status.
+
+## 2025-06-30 - Critical Bug Fixes: Multiple Jobs & Active Cron Jobs Display
+
+**Status**: Fixed major functionality bugs that were causing job loss and incorrect UI display
+
+**Critical Issues Fixed**:
+
+- ✅ **Multiple Jobs Bug**: Fixed issue where only the first job was saved to cron when applying multiple jobs
+
+  - **Root Cause**: `CronManager` was using a cached `JobsStore` instance that didn't reload fresh job data
+  - **Fix**: Modified `_generate_cron_lines()` to always create a fresh `JobsStore` instance
+  - **Result**: All jobs are now correctly read from disk and written to crontab
+  - **Verification**: Added comprehensive logging showing job counts and processing details
+
+- ✅ **Loader Hang Issue**: Fixed frontend loader spinning forever on apply errors
+
+  - **Problem**: Frontend didn't handle HTTP error responses properly
+  - **Fix**: Enhanced `applyChanges()` function with proper error handling for non-200 responses
+  - **Result**: Users now see clear error messages instead of infinite loading
+
+- ✅ **Active Cron Jobs Display Issues**: Fixed missing labels and incorrect action descriptions
+  - **Problem 1**: Job labels were not displayed (showed generic time instead)
+  - **Problem 2**: All jobs incorrectly showed "Playlist: Default" regardless of actual action
+  - **Fix**: Updated JavaScript template code to display correct `job.label` and proper action descriptions
+  - **Result**: Now shows proper labels like "Test Job 1" and correct actions like "Pause playback", "Set volume to 75%"
+
+**Enhanced Error Handling**:
+
+- Added detailed logging throughout job processing pipeline
+- Backend validation prevents applying when no jobs exist
+- Frontend shows meaningful error messages with fallback alerts
+- All HTTP error responses properly handled
+
+**Technical Details**:
+
+- **Files Modified**: `app/cronblock.py`, `app/api.py`, `templates/partials/cron_review_modal.html`, `app/jobs_store.py`, `templates/index.html`
+- **Key Fix**: Fresh `JobsStore` instances ensure latest job data is always loaded
+- **Logging**: Comprehensive debug output for job counts, zone processing, and cron generation
+- **Error Handling**: Proper HTTP status checking and user-friendly error display
+
+**Verification Complete**:
+
+✅ Multiple jobs (4 total) successfully saved and applied to cron  
+✅ All jobs display with correct labels: "Test Job 1", "Test Job 2", "Test Job 3", "Start day volume"  
+✅ Correct action descriptions: "Pause playback", "Resume playback", "Set volume to 75%"  
+✅ No more incorrect "Playlist: Default" text  
+✅ Proper error handling prevents loader hangs  
+✅ Enhanced logging provides full visibility into job processing
+
+**User Experience Now**:
+
+- Users can add multiple jobs without losing any
+- Active Cron Jobs page shows meaningful labels and action descriptions
+- Error messages are clear and actionable
+- Apply process provides real-time feedback and never hangs
+
+This resolves the core functionality issues that were preventing reliable multi-job scheduling.
+
+## 2025-06-30 - UI Compactness Improvement: 2-Line Job Entries on Large Screens
+
+**Status**: Optimized job entry layout for better space efficiency on larger screens
+
+**UI Enhancement**:
+
+- ✅ **Compact Job Entry Layout**: Redesigned job cards to use maximum 2 lines instead of 3 on larger screens
+  - **Target**: Both Create Schedules and Active Cron Jobs pages
+  - **Problem**: Previous layout wasted vertical space with 3+ lines per job entry on large screens
+  - **Solution**: Responsive design that combines information horizontally on larger screens
+  - **Implementation**:
+    - **Line 1**: Job label/title + time + status badge (Applied/Pending)
+    - **Line 2**: Days + Action + Speakers (for custom zones) - all on one line with proper spacing
+    - Responsive breakpoints: wraps to multiple lines on smaller screens, stays compact on `lg+` screens
+    - Used Tailwind's `flex-wrap lg:flex-nowrap` for responsive behavior
+
+**Technical Implementation**:
+
+1. **Templates Updated**:
+
+   - `templates/partials/jobs_list.html` (Create Schedules page)
+   - `templates/partials/all_cron_jobs.html` (Active Cron Jobs page)
+
+2. **Layout Changes**:
+
+   - Reduced padding from `p-4` to `p-3` for tighter spacing
+   - Added `min-w-0` and `truncate` classes for proper text overflow handling
+   - Used `flex-shrink-0` for elements that shouldn't compress
+   - Combined Days, Action, and Speakers info into single responsive line
+   - Maintained accessibility with proper contrast and spacing
+
+3. **Responsive Design**:
+   - **Large screens (lg+)**: Everything fits on 2 lines with horizontal layout
+   - **Smaller screens**: Gracefully wraps with `flex-wrap` for readability
+   - **Mobile-friendly**: All information remains accessible on smaller devices
+
+**User Experience Benefits**:
+
+- ✅ **Space Efficiency**: 33% reduction in vertical space usage (3 lines → 2 lines)
+- ✅ **More Jobs Visible**: Users can see more schedules without scrolling
+- ✅ **Better Information Density**: Related information grouped logically
+- ✅ **Maintained Readability**: Clear separation between job details
+- ✅ **Responsive Design**: Works well across all screen sizes
+- ✅ **Consistent Design**: Same compact layout on both Create Schedules and Active Cron Jobs pages
+
+**Visual Design**:
+
+- **Line 1**: `[Job Label] [Time] [Status Badge]` - Primary information
+- **Line 2**: `Days: Mon, Tue | Action: Pause playback | Speakers: Computer, Kitchen` - Detailed info
+
+**Result**: The job entry layout is now much more space-efficient for desktop users while maintaining full functionality and readability across all devices. Users can view significantly more jobs at once, improving the overall workflow experience.

@@ -246,6 +246,18 @@ def apply_cron() -> Any:
             from flask import current_app
             app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
             cronblock.cron_manager = cronblock.CronManager(app_support_dir)
+        
+        # Log the current state before applying
+        from flask import current_app
+        app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
+        jobs_store = JobsStore(app_support_dir)
+        all_jobs = jobs_store.get_all_jobs()
+        total_jobs = sum(len(jobs) for jobs in all_jobs.values())
+        logger.info(f"Apply cron called with {len(all_jobs)} zones and {total_jobs} total jobs")
+        
+        if total_jobs == 0:
+            logger.warning("No jobs found in store when applying to cron")
+            return jsonify({"error": "No jobs found to apply"}), 400
             
         cronblock.cron_manager.apply_jobs_to_cron()
         logger.info("Successfully applied jobs to crontab")
@@ -253,8 +265,8 @@ def apply_cron() -> Any:
         return jsonify({"ok": True})
         
     except Exception as e:
-        logger.error(f"Error applying jobs to cron: {e}")
-        return jsonify({"error": "Failed to apply jobs to cron"}), 500
+        logger.error(f"Error applying jobs to cron: {e}", exc_info=True)
+        return jsonify({"error": f"Failed to apply jobs to cron: {str(e)}"}), 500
 
 
 @api_bp.route("/status", methods=["GET"])

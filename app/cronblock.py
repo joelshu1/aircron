@@ -127,12 +127,19 @@ class CronManager:
         """Generate cron lines from jobs in store."""
         lines = [AIRCRON_BEGIN, ""]
         
-        all_jobs = self.jobs_store.get_all_jobs()
+        # Always create a fresh JobsStore instance to ensure we get latest jobs
+        fresh_jobs_store = JobsStore(self.app_support_dir)
+        all_jobs = fresh_jobs_store.get_all_jobs()
+        
+        # Add logging to debug job count
+        total_jobs = sum(len(jobs) for jobs in all_jobs.values())
+        logger.info(f"Generating cron lines for {len(all_jobs)} zones with {total_jobs} total jobs")
         
         for zone, jobs in all_jobs.items():
             if not jobs:
                 continue
                 
+            logger.info(f"Processing {len(jobs)} jobs for zone: {zone}")
             lines.append(f"# {zone}")
             lines.append("")
             
@@ -144,8 +151,12 @@ class CronManager:
                         cron_line,
                         ""
                     ])
+                    logger.info(f"Generated cron line for job {job.id}: {cron_line}")
+                else:
+                    logger.warning(f"Failed to generate cron line for job {job.id}")
         
         lines.append(AIRCRON_END)
+        logger.info(f"Generated {len(lines)} total cron lines")
         return lines
     
     def _job_to_cron_line(self, job: Job) -> Optional[str]:

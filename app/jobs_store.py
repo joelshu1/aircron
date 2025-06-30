@@ -119,6 +119,7 @@ class JobsStore:
     def add_job(self, job: Job) -> None:
         """Add a new job."""
         all_jobs = self._load_jobs()
+        logger.info(f"Loading jobs for add_job: found {len(all_jobs)} zones with {sum(len(jobs) for jobs in all_jobs.values())} total jobs")
         
         # Validate no conflicts (same time + overlapping days in same zone)
         existing_jobs = self.get_jobs_for_zone(job.zone)
@@ -131,9 +132,13 @@ class JobsStore:
         # Add job
         if job.zone not in all_jobs:
             all_jobs[job.zone] = []
+            logger.info(f"Created new zone: {job.zone}")
         
         all_jobs[job.zone].append(job.to_dict())
+        logger.info(f"Added job {job.id} to zone {job.zone}. Zone now has {len(all_jobs[job.zone])} jobs")
+        
         self._save_jobs(all_jobs)
+        logger.info(f"Saved jobs to disk. Total zones: {len(all_jobs)}, total jobs: {sum(len(jobs) for jobs in all_jobs.values())}")
         logger.info(f"Added job {job.id} for zone {job.zone}")
     
     def update_job(self, job: Job) -> None:

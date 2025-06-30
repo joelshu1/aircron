@@ -42,52 +42,63 @@
                 {% for job in jobs %}
                 <div class="border rounded-lg p-3 bg-gray-50 hover:shadow-md transition">
                     <div class="flex justify-between items-start">
-                        <div class="flex-1">
-                            <div class="flex items-center space-x-2 mb-2">
+                        <div class="flex-1 min-w-0">
+                            <!-- Line 1: Title, Time, Status -->
+                            <div class="flex items-center space-x-2 mb-1">
                                 {% if job.label %}
-                                    <span class="font-semibold text-blue-700">{{ job.label }}</span>
+                                    <span class="font-semibold text-blue-700 truncate">{{ job.label }}</span>
                                 {% else %}
                                     <span class="font-medium text-gray-800">{{ job.action.title() }}</span>
                                 {% endif %}
-                                <span class="text-sm text-gray-500">{{ job.time }}</span>
-                                <span class="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800">
-                                    Applied
-                                </span>
+                                <span class="text-sm text-gray-500 flex-shrink-0">{{ job.time }}</span>
+                                <span class="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800 flex-shrink-0">Applied</span>
                             </div>
                             
-                            {% if zone.startswith('Custom:') %}
-                            <div class="text-sm text-blue-600 mb-2">
-                                <span class="font-medium">Speakers:</span>
-                                {% set speakers = zone.replace('Custom:', '').split(',') %}
-                                {% for speaker in speakers %}{{ speaker.strip() }}{% if not loop.last %}, {% endif %}{% endfor %}
+                            <!-- Line 2: Combined Days, Action, Speakers (responsive) -->
+                            <div class="flex flex-wrap lg:flex-nowrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
+                                <!-- Days -->
+                                <div class="flex-shrink-0">
+                                    <span class="font-medium text-gray-700">Days:</span>
+                                    {% for day in job.days %}
+                                        {% if day == 1 %}Mon{% endif %}
+                                        {% if day == 2 %}Tue{% endif %}
+                                        {% if day == 3 %}Wed{% endif %}
+                                        {% if day == 4 %}Thu{% endif %}
+                                        {% if day == 5 %}Fri{% endif %}
+                                        {% if day == 6 %}Sat{% endif %}
+                                        {% if day == 7 %}Sun{% endif %}{% if not loop.last %}, {% endif %}
+                                    {% endfor %}
+                                </div>
+                                
+                                <!-- Action -->
+                                <div class="flex-shrink-0">
+                                    <span class="font-medium text-gray-700">Action:</span>
+                                    {% if job.action == 'play' and job.args.uri %}
+                                        <span class="truncate">Play: {{ job.args.uri }}</span>
+                                    {% elif job.action == 'pause' %}
+                                        Pause playback
+                                    {% elif job.action == 'resume' %}
+                                        Resume playback
+                                    {% elif job.action == 'volume' and job.args.volume %}
+                                        Set volume to {{ job.args.volume }}%
+                                    {% else %}
+                                        {{ job.action.title() }}
+                                    {% endif %}
+                                </div>
+                                
+                                <!-- Speakers for Custom zones -->
+                                {% if zone.startswith('Custom:') %}
+                                <div class="text-blue-600 truncate">
+                                    <span class="font-medium">Speakers:</span>
+                                    {% set speakers = zone.replace('Custom:', '').split(',') %}
+                                    {% for speaker in speakers %}{{ speaker.strip() }}{% if not loop.last %}, {% endif %}{% endfor %}
+                                </div>
+                                {% endif %}
                             </div>
-                            {% endif %}
-                            
-                            <div class="text-sm text-gray-600 mb-2">
-                                <span class="font-medium">Days:</span>
-                                {% for day in job.days %}
-                                    {% if day == 1 %}Mon{% endif %}
-                                    {% if day == 2 %}Tue{% endif %}
-                                    {% if day == 3 %}Wed{% endif %}
-                                    {% if day == 4 %}Thu{% endif %}
-                                    {% if day == 5 %}Fri{% endif %}
-                                    {% if day == 6 %}Sat{% endif %}
-                                    {% if day == 7 %}Sun{% endif %}{% if not loop.last %}, {% endif %}
-                                {% endfor %}
-                            </div>
-                            
-                            {% if job.action == 'play' and job.args.uri %}
-                            <div class="text-xs text-gray-500 font-mono truncate">
-                                {{ job.args.uri }}
-                            </div>
-                            {% elif job.action == 'volume' and job.args.volume %}
-                            <div class="text-xs text-gray-500">
-                                Volume: {{ job.args.volume }}%
-                            </div>
-                            {% endif %}
                         </div>
                         
-                        <div class="flex space-x-2 ml-4">
+                        <!-- Action buttons -->
+                        <div class="flex space-x-2 ml-4 flex-shrink-0">
                             <button 
                                 hx-get="/modal/edit/{{ zone }}/{{ job.id }}"
                                 hx-target="#modal-container"

@@ -36,6 +36,43 @@ def index() -> Any:
         current_jobs_objs = all_jobs.get(current_zone, [])
         current_jobs = [job.to_dict() for job in current_jobs_objs]
         
+        # Get cron status to determine which jobs are applied
+        from . import cronblock
+        if cronblock.cron_manager is None:
+            cronblock.cron_manager = cronblock.CronManager(app_support_dir)
+        
+        # Get current cron jobs
+        current_lines = cronblock.cron_manager._get_current_crontab()
+        current_cron_jobs = set()
+        in_aircron_section = False
+        
+        for line in current_lines:
+            line = line.strip()
+            if line == cronblock.AIRCRON_BEGIN:
+                in_aircron_section = True
+            elif line == cronblock.AIRCRON_END:
+                in_aircron_section = False
+            elif in_aircron_section and line and not line.startswith("#"):
+                # Normalize the cron line for comparison
+                current_cron_jobs.add(_normalize_cron_line(line))
+        
+        # Add status to each job in current zone
+        for job in current_jobs:
+            job_obj = None
+            for j in current_jobs_objs:
+                if j.id == job['id']:
+                    job_obj = j
+                    break
+            
+            if job_obj:
+                cron_line = cronblock.cron_manager._job_to_cron_line(job_obj)
+                if cron_line and _normalize_cron_line(cron_line) in current_cron_jobs:
+                    job['status'] = 'applied'
+                else:
+                    job['status'] = 'pending'
+            else:
+                job['status'] = 'unknown'
+        
         return render_template(
             "index.html",
             speakers=speakers,
@@ -69,6 +106,43 @@ def zone_view(zone_name: str) -> Any:
         jobs_objs = jobs_store.get_jobs_for_zone(zone_name)
         jobs = [job.to_dict() for job in jobs_objs]
         
+        # Get cron status to determine which jobs are applied
+        from . import cronblock
+        if cronblock.cron_manager is None:
+            cronblock.cron_manager = cronblock.CronManager(app_support_dir)
+        
+        # Get current cron jobs
+        current_lines = cronblock.cron_manager._get_current_crontab()
+        current_cron_jobs = set()
+        in_aircron_section = False
+        
+        for line in current_lines:
+            line = line.strip()
+            if line == cronblock.AIRCRON_BEGIN:
+                in_aircron_section = True
+            elif line == cronblock.AIRCRON_END:
+                in_aircron_section = False
+            elif in_aircron_section and line and not line.startswith("#"):
+                # Normalize the cron line for comparison
+                current_cron_jobs.add(_normalize_cron_line(line))
+        
+        # Add status to each job
+        for job in jobs:
+            job_obj = None
+            for j in jobs_objs:
+                if j.id == job['id']:
+                    job_obj = j
+                    break
+            
+            if job_obj:
+                cron_line = cronblock.cron_manager._job_to_cron_line(job_obj)
+                if cron_line and _normalize_cron_line(cron_line) in current_cron_jobs:
+                    job['status'] = 'applied'
+                else:
+                    job['status'] = 'pending'
+            else:
+                job['status'] = 'unknown'
+        
         return render_template(
             "partials/jobs_list.html",
             zone=zone_name,
@@ -77,6 +151,11 @@ def zone_view(zone_name: str) -> Any:
     except Exception as e:
         logger.error(f"Error loading zone {zone_name}: {e}")
         return f"<div class='text-red-500'>Error loading zone: {e}</div>", 500
+
+
+def _normalize_cron_line(line: str) -> str:
+    """Normalize cron line for comparison by removing extra spaces."""
+    return " ".join(line.split())
 
 
 @views_bp.route("/modal/add/<zone_name>")
