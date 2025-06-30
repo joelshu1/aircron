@@ -7,4 +7,5 @@
 .env.development
 .env.test
 .env.production
-prompts/
+/prompts/
+/.cursor/
