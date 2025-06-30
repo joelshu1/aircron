@@ -288,18 +288,32 @@ form.addEventListener('submit', function(evt) {
         if (response.ok) {
             // Close modal on success
             document.getElementById('modal-container').innerHTML = '';
-            // Refresh current zone view to show new job
-            if (targetZone) {
-                htmx.ajax('GET', '/zone/' + encodeURIComponent(targetZone), '#schedules-content');
-                // Update current zone tracking
-                if (typeof updateCurrentZone === 'function') {
-                    updateCurrentZone(targetZone);
-                }
-            }
+            
             // Show success message
             if (window.AirCron && window.AirCron.showNotification) {
                 window.AirCron.showNotification('Schedule saved successfully');
             }
+            
+            // Always refresh the current schedules tab to show all jobs properly
+            const schedulesContent = document.getElementById('schedules-content');
+            if (schedulesContent) {
+                // If we're creating a job for a different zone than currently displayed,
+                // switch to that zone first
+                if (targetZone && targetZone !== window.currentZone && typeof updateCurrentZone === 'function') {
+                    updateCurrentZone(targetZone);
+                    // The updateCurrentZone function should handle the refresh
+                } else if (window.currentZone) {
+                    // Refresh current zone
+                    htmx.ajax('GET', '/zone/' + encodeURIComponent(window.currentZone), '#schedules-content');
+                } else {
+                    // Fallback: refresh with the target zone
+                    htmx.ajax('GET', '/zone/' + encodeURIComponent(targetZone), '#schedules-content');
+                    if (typeof updateCurrentZone === 'function') {
+                        updateCurrentZone(targetZone);
+                    }
+                }
+            }
+            
             // Refresh cron status
             if (typeof checkCronStatus === 'function') {
                 checkCronStatus();
