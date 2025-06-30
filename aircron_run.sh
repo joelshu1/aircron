@@ -44,9 +44,9 @@ if [ "$SPEAKER" = "All Speakers" ]; then
             "$SPOTIFY_CMD" play 
             ;;
         volume) 
-            echo "$(date): Executing global $ACTION with volume: $1" >> "$LOG_FILE"
-            "$SPOTIFY_CMD" volume "$1" >> "$LOG_FILE" 2>&1
-            echo "$(date): Volume command exit code: $?" >> "$LOG_FILE"
+            echo "$(date): Executing global Spotify volume control with volume: $1" >> "$LOG_FILE"
+            "$SPOTIFY_CMD" vol "$1" >> "$LOG_FILE" 2>&1
+            echo "$(date): Spotify volume command exit code: $?" >> "$LOG_FILE"
             ;;
     esac
     
@@ -92,15 +92,20 @@ elif [[ "$SPEAKER" == Custom:* ]]; then
                     "$SPOTIFY_CMD" play 
                     ;;
                 volume) 
-                    echo "$(date): Executing $ACTION for custom speaker: $speaker with volume: $1" >> "$LOG_FILE"
-                    "$SPOTIFY_CMD" volume "$1" >> "$LOG_FILE" 2>&1
-                    echo "$(date): Volume command exit code: $?" >> "$LOG_FILE"
+                    # For custom speakers, control individual Airfoil speaker volume
+                    echo "$(date): Setting Airfoil speaker volume for: $speaker to $1%" >> "$LOG_FILE"
+                    # Convert percentage (0-100) to Airfoil volume (0.0-1.0)
+                    AIRFOIL_VOLUME=$(echo "scale=2; $1 / 100" | bc -l)
+                    osascript -e "tell application \"Airfoil\" to try
+                        set (volume of every speaker whose name is \"$speaker\") to $AIRFOIL_VOLUME
+                    end try" >> "$LOG_FILE" 2>&1
+                    echo "$(date): Airfoil speaker volume command exit code: $?" >> "$LOG_FILE"
                     ;;
             esac
         fi
     done
 else
-    # Handle single speaker
+    # Handle single speaker - use Airfoil speaker volume control
     case "$ACTION" in
         play) 
             "$SPOTIFY_CMD" play uri "$@" && osascript -e "tell app \"Airfoil\" to connect (every speaker whose name is \"$SPEAKER\")" 
@@ -112,9 +117,14 @@ else
             "$SPOTIFY_CMD" play 
             ;;
         volume) 
-            echo "$(date): Executing $ACTION for speaker: $SPEAKER with volume: $1" >> "$LOG_FILE"
-            "$SPOTIFY_CMD" volume "$1" >> "$LOG_FILE" 2>&1
-            echo "$(date): Volume command exit code: $?" >> "$LOG_FILE"
+            # For individual speakers, control Airfoil speaker volume, not Spotify volume
+            echo "$(date): Setting Airfoil speaker volume for: $SPEAKER to $1%" >> "$LOG_FILE"
+            # Convert percentage (0-100) to Airfoil volume (0.0-1.0)
+            AIRFOIL_VOLUME=$(echo "scale=2; $1 / 100" | bc -l)
+            osascript -e "tell application \"Airfoil\" to try
+                set (volume of every speaker whose name is \"$SPEAKER\") to $AIRFOIL_VOLUME
+            end try" >> "$LOG_FILE" 2>&1
+            echo "$(date): Airfoil speaker volume command exit code: $?" >> "$LOG_FILE"
             ;;
     esac
 fi

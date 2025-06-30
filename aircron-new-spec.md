@@ -28,6 +28,7 @@ Out of scope (v1)
 • U-3 – Edit schedule: "I click ✏️ next to a job, change time to 08:00, save, and cron is updated."
 • U-4 – Delete schedule: "I click 🗑 to remove a job; it disappears and cron rewrites without that line."
 • U-5 – View schedule: "I open the 'View Schedule' tab, pick a day, and see a color-coded 24h grid of all jobs, with speaker tooltips and edit/delete."
+• U-6 – Volume control: "I set volume for 'All Speakers' to control global Spotify volume, or set volume for individual speakers to control per-speaker Airfoil volume."
 
 ⸻
 
@@ -43,6 +44,7 @@ B -->|Shell| C[aircron_run.sh]
 B -->|cron writer| D[`crontab`]
 B -->|osascript| E[Airfoil.app]
 C -->|CLI| F[spotify-cli]
+C -->|AppleScript| E[Airfoil.app - Speaker Volume]
 
 3.1 Components
 
@@ -50,7 +52,7 @@ Component Language Key libs Notes
 Tray runner Python 3.12 rumps Starts Flask in a background thread; opens browser on first launch.
 Flask/HTMX server Python 3.12 Flask, htmx, croniter Provides REST & HTML.
 Cron handler Python stdlib subprocess, tempfile Replaces only the AirCron block; backs up current crontab to ~/aircron*backup*<ISO>.txt.
-Shell wrapper bash Exists already; signature becomes aircron_run.sh "<speaker>" <action> [args…].
+Shell wrapper bash Exists already; signature becomes aircron_run.sh "<speaker>" <action> [args…]. Implements dual volume control: Spotify master volume for "All Speakers", Airfoil per-speaker volume for individual/custom zones.
 
 ⸻
 
@@ -87,6 +89,25 @@ POST /api/cron/apply Rewrite crontab – {ok:true} or {error:…}
 
 ⸻
 
+5.1 Volume Control Architecture
+
+AirCron implements **dual volume control systems** depending on the target speaker zone:
+
+Target Type Volume Control Method Effect
+"All Speakers" Spotify Master Volume (`spotify vol X`) Global volume change affecting all connected speakers equally
+Individual Speaker Airfoil Speaker Volume (`tell Airfoil to set volume of speaker to X`) Per-speaker volume control allowing independent levels
+Custom Multi-Speaker Airfoil Speaker Volume (applied to each speaker individually) Independent volume control for each speaker in the custom group
+
+**Technical Implementation:**
+
+- **Spotify Volume**: Ranges 0-100, controls global audio output level
+- **Airfoil Volume**: Ranges 0.0-1.0 (UI percentages auto-converted), controls individual speaker amplification
+- **Multi-Speaker Handling**: Custom groups process each speaker sequentially with the same volume setting
+
+This dual approach enables both synchronized global volume control and zone-specific audio management for professional audio environments.
+
+⸻
+
 6 Cron Line Format
 
 # BEGIN AirCron (auto-generated; do not edit between markers)
@@ -99,10 +120,19 @@ POST /api/cron/apply Rewrite crontab – {ok:true} or {error:…}
 
 0 9 \* \* 1-5 /usr/local/bin/aircron_run.sh "Kitchen" pause
 
+# All Speakers – Global Volume 09:30
+
+30 9 \* \* 1-5 /usr/local/bin/aircron_run.sh "All Speakers" volume 75
+
+# Kitchen – Speaker Volume 10:00
+
+0 10 \* \* 1-5 /usr/local/bin/aircron_run.sh "Kitchen" volume 50
+
 # END AirCron
 
 One cron line per job.
 cronblock.py keeps markers intact; anything outside them is untouched.
+**Volume Actions**: Same "volume" action produces different behavior - "All Speakers" targets control Spotify master volume, individual/custom speaker targets control Airfoil per-speaker volume.
 
 ⸻
 
@@ -202,6 +232,8 @@ Codesign & notarisation are optional for internal distribution on macOS 10.13; G
 4. Backup file is created in ~/aircron_backup_YYYY-MM-DDTHHMMSS.txt.
 5. Tray app auto-reconnects to Flask after reboot (launch agent plist provided in dist/com.orchid.aircron.plist).
 6. View Schedule tab shows all jobs for the selected day, color-coded, with tooltips and working edit/delete.
+7. Volume control works correctly: "All Speakers" volume changes Spotify master volume, individual speaker volume changes that speaker's Airfoil volume.
+8. Multi-speaker custom groups apply volume changes to each selected speaker independently in Airfoil.
 
 ⸻
 
@@ -209,9 +241,26 @@ Appendix A Sample aircron_run.sh
 
 #!/usr/bin/env bash
 SPEAKER="$1"; ACTION="$2"; shift 2
+
+# Dual Volume Control Implementation
+
 case "$ACTION" in
-play) /usr/local/bin/spotify play "$@" && osascript -e "tell app \"Airfoil\" to connect (every speaker whose name is \"$SPEAKER\")" ;;
-pause) /usr/local/bin/spotify pause ;;
-resume) /usr/local/bin/spotify play ;;
-volume) /usr/local/bin/spotify volume "$1" ;;
+play) 
+  /usr/local/bin/spotify play "$@" && osascript -e "tell app \"Airfoil\" to connect (every speaker whose name is \"$SPEAKER\")" ;;
+pause) 
+  /usr/local/bin/spotify pause ;;
+resume) 
+  /usr/local/bin/spotify play ;;
+volume) 
+  if [ "$SPEAKER" = "All Speakers" ]; then # Global Spotify volume control
+/usr/local/bin/spotify vol "$1"
+  else
+    # Individual Airfoil speaker volume control
+    AIRFOIL_VOLUME=$(echo "scale=2; $1 / 100" | bc -l)
+    osascript -e "tell application \"Airfoil\" to set (volume of every speaker whose name is \"$SPEAKER\") to $AIRFOIL_VOLUME"
+fi ;;
 esac
+
+# Note: Custom multi-speaker zones (Custom:Speaker1,Speaker2) are handled by parsing
+
+# the speaker list and applying the volume command to each speaker individually.

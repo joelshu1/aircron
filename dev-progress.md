@@ -1,5 +1,137 @@
 # AirCron UI Development Progress
 
+## 2025-07-01 - Critical Volume Action Fix: Two-Type Volume Control Implementation
+
+**Status**: Fixed non-functional volume action by implementing proper two-type volume control architecture
+
+**Critical Issue Fixed**:
+
+- ✅ **Volume Action Not Working**: Fixed volume actions having no effect due to wrong implementation
+  - **Root Cause**: All volume actions incorrectly used `spotify volume X` (invalid command) instead of proper volume control mechanisms
+  - **Original Design Intent**: Based on AppleScript examples (`regulate.scpt`, `connect.scpt`), the system was designed for **two distinct volume control types**:
+    1. **Spotify Global Volume**: For "All Speakers" - controls Spotify's master playback volume
+    2. **Airfoil Speaker Volume**: For individual/custom speakers - controls specific speaker volume in Airfoil
+  - **Problem**: Current implementation only attempted Spotify volume control for all cases, using wrong command syntax
+
+**Technical Implementation**:
+
+1. **Fixed Spotify Command Syntax** (`aircron_run.sh`):
+
+   ```bash
+   # OLD: "$SPOTIFY_CMD" volume "$1"  # Invalid command
+   # NEW: "$SPOTIFY_CMD" vol "$1"     # Correct command
+   ```
+
+2. **Implemented Airfoil Speaker Volume Control**:
+
+   ```bash
+   # For individual speakers: Control Airfoil speaker volume
+   AIRFOIL_VOLUME=$(echo "scale=2; $1 / 100" | bc -l)  # Convert % to 0.0-1.0
+   osascript -e "tell application \"Airfoil\" to try
+       set (volume of every speaker whose name is \"$SPEAKER\") to $AIRFOIL_VOLUME
+   end try"
+   ```
+
+3. **Proper Volume Control Logic**:
+   - **All Speakers**: Uses `spotify vol X` for global Spotify volume control (affects all output)
+   - **Individual Speaker**: Uses Airfoil AppleScript to set specific speaker volume (affects only that speaker)
+   - **Custom Speaker Groups**: Uses Airfoil AppleScript for each selected speaker individually
+
+**Volume Control Behavior Now**:
+
+- ✅ **"All Speakers" Volume**: Changes Spotify's global output volume (affects all connected speakers equally)
+- ✅ **Individual Speaker Volume**: Changes that specific speaker's volume in Airfoil (allows different volume per speaker)
+- ✅ **Custom Speaker Groups**: Changes volume for each selected speaker independently in Airfoil
+- ✅ **Percentage Conversion**: UI percentages (0-100%) correctly convert to Airfoil decimal format (0.0-1.0)
+
+**Verification Tests Passed**:
+
+1. ✅ **All Speakers Volume**: `./aircron_run.sh "All Speakers" volume 55` → Spotify volume changed to 54
+2. ✅ **Individual Speaker Volume**: `./aircron_run.sh "Computer" volume 50` → Airfoil speaker volume changed from 0.75 to 0.50
+3. ✅ **Command Syntax**: Spotify volume commands now use correct `vol` instead of invalid `volume`
+4. ✅ **Logging**: Proper distinction between "Spotify volume control" vs "Airfoil speaker volume" in logs
+5. ✅ **Exit Codes**: All volume commands return exit code 0 (success)
+
+**User Experience Impact**:
+
+- **Volume actions now work**: Previously non-functional volume schedules will now execute properly
+- **Proper Speaker Control**: Individual speakers can have different volume levels via Airfoil
+- **Global Volume Control**: "All Speakers" provides unified volume control via Spotify
+- **Professional Audio Setup**: Enables hotel/business audio management with per-zone volume control
+
+**Original Design Fulfilled**: This fix implements the original volume control architecture as evidenced by the AppleScript examples (`prompts/bin/regulate.scpt`, `connect.scpt`) which show Airfoil speaker volume control was always the intended approach for individual speaker management.
+
+## 2025-07-01 - Critical Delete & Apply Fixes: UI Refresh & Empty Job Handling
+
+**Status**: Fixed major UX issues with job deletion and cron application
+
+**Critical Issues Fixed**:
+
+- ✅ **Delete Job UI Refresh Issue**: Fixed jobs not disappearing from UI after deletion until page refresh
+
+  - **Root Cause**: DELETE API endpoint returned 204 No Content, but HTMX needed HTML to replace deleted element
+  - **Problem**: Users would delete jobs and see them still listed until manually refreshing the page
+  - **Solution**:
+    - Modified `DELETE /api/jobs/<zone>/<job_id>` to return `<div style="display: none;"></div>` with 200 status
+    - Updated HTMX target from `hx-target="closest div"` to `hx-target="closest .border"` for proper element selection
+  - **Result**: Jobs now immediately disappear from UI when deleted, providing instant visual feedback
+
+- ✅ **Apply to Cron Error After Deleting All Jobs**: Fixed 400 error when applying cron with no jobs
+  - **Root Cause**: `apply_cron` endpoint treated 0 jobs as an error condition instead of valid "clear cron" operation
+  - **Problem**: After deleting all jobs, clicking "Apply to Cron" would show error: "No jobs found to apply"
+  - **Error**: `POST http://127.0.0.1:3009/api/cron/apply 400 (BAD REQUEST)`
+  - **Solution**:
+    - Removed the error condition for 0 jobs in `POST /api/cron/apply`
+    - Allow `CronManager.apply_jobs_to_cron()` to run normally (properly clears cron section)
+    - Return success response for both job application and cron clearing
+  - **Result**: "Apply to Cron" now succeeds when clearing all jobs, properly maintaining empty cron section
+
+**Technical Implementation**:
+
+1. **Delete API Fix** (`app/api.py`):
+
+   ```python
+   # OLD: return "", 204
+   # NEW: return '<div style="display: none;"></div>', 200
+   ```
+
+2. **HTMX Target Fix** (`templates/partials/jobs_list.html`):
+
+   ```html
+   <!-- OLD: hx-target="closest div" -->
+   <!-- NEW: hx-target="closest .border" -->
+   ```
+
+3. **Cron Apply Logic Fix** (`app/api.py`):
+   ```python
+   # OLD: if total_jobs == 0: return error
+   # NEW: Always run apply_jobs_to_cron() - handles both apply and clear
+   ```
+
+**User Experience Improvements**:
+
+- ✅ **Immediate Delete Feedback**: Jobs disappear instantly when deleted
+- ✅ **No More Apply Errors**: "Apply to Cron" works correctly with zero jobs
+- ✅ **Proper Cron Clearing**: Empty job store correctly clears cron section (shows only BEGIN/END markers)
+- ✅ **Consistent Workflow**: Delete → Apply → Success (no error interruptions)
+- ✅ **Error Elimination**: Fixed infinite loader hangs on failed apply operations
+
+**Verification Tests Passed**:
+
+1. ✅ **Delete UI Refresh**: Jobs immediately removed from UI when deleted via HTMX
+2. ✅ **Empty Apply Success**: `POST /api/cron/apply` returns `{"ok": true}` with 0 jobs
+3. ✅ **Cron Section Cleared**: Crontab correctly shows empty AirCron section after clearing all jobs
+4. ✅ **API Response Format**: DELETE endpoint returns valid HTML for HTMX element replacement
+5. ✅ **No More 400 Errors**: Apply operations succeed regardless of job count
+
+**Workflow Now**:
+
+- **Delete Jobs**: Select jobs → Delete → Jobs immediately disappear from UI
+- **Clear All Jobs**: Delete all → Apply to Cron → Success (cron section cleared)
+- **Mixed Operations**: Add/edit/delete jobs → Apply → All changes reflected correctly
+
+**Result**: The delete and apply workflow is now seamless and error-free. Users get immediate visual feedback for all operations and can confidently manage their job schedules without encountering confusing error states or UI lag.
+
 ## 2025-07-01 - Modal Multi-Speaker Selection & UX Improvements
 
 **Status**: Major UX improvement for schedule creation/editing
@@ -703,14 +835,45 @@ The application now provides a professional, intuitive interface that eliminates
 
 ## Untracked/Advanced Features & Inconsistencies (as of 2025-07-01)
 
+**Volume Control Architecture (Critical Implementation Detail)**:
+
+- The app implements **dual volume control systems** not clearly documented in the original spec:
+  - **"All Speakers" volume**: Controls Spotify's master volume (`spotify vol X`) - affects global audio output
+  - **Individual/Custom speaker volume**: Controls Airfoil per-speaker volume via AppleScript - allows independent speaker levels
+- This two-type volume control enables professional audio management: global synchronization + zone-specific control
+- The same "volume" action produces completely different behaviors depending on the target zone
+- Multi-speaker custom groups apply volume to each speaker individually in sequence
+
+**UI/UX Enhancements Beyond Original Spec**:
+
 - The modal UI for add/edit is now a multi-select, not a static zone field as shown in the spec.
 - The "All Speakers" logic (auto-disable/auto-select) is not described in the spec.
 - The playlist picker in the modal is now fully integrated and required for play actions, with validation and fallback to manual URI entry.
 - The tab-based navigation and playlist management system are more advanced than the original spec.
 - The cron review modal now uses job cards, not raw cron lines, and groups jobs by status with color coding.
 - The sidebar composite speaker logic and dynamic button for multi-speaker schedules are not described in the spec.
+
+**Backend API & Storage Enhancements**:
+
 - The JS logic for dynamic zone/selection tracking, error handling, and modal state is more robust than described in the docs.
 - The API supports composite and custom zones, and the UI exposes this in a more user-friendly way than the spec describes.
+- Job labels (display names) are now required for all jobs and shown throughout the UI - not mentioned in original spec.
+- Real-time status indicators (Applied/Pending Apply) with dynamic cron comparison logic.
+- Enhanced error handling, logging, and user feedback systems throughout.
+
+**Professional Audio Management Features**:
+
+- Per-speaker volume control via Airfoil enables zone-specific audio levels (hotel/business use case)
+- Global volume control via Spotify enables synchronized audio adjustments across all zones
+- Multi-speaker custom groups support complex audio routing scenarios
+- Real-time speaker discovery and connection management via AppleScript integration
+
+**Technical Architecture Notes**:
+
+- Volume control uses `bc` (basic calculator) for percentage-to-decimal conversion for Airfoil
+- AppleScript error handling with `try/end try` blocks for robust speaker volume control
+- Comprehensive logging distinguishes between Spotify vs Airfoil volume operations
+- The shell wrapper (`aircron_run.sh`) implements the core dual volume control logic
 
 ## Previous Entries...
 

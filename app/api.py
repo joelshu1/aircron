@@ -228,7 +228,8 @@ def delete_job(zone: str, job_id: str) -> Any:
         jobs_store.delete_job(zone, job_id)
         logger.info(f"Deleted job {job_id} from zone {zone}")
         
-        return "", 204
+        # Return empty div for HTMX to replace the deleted job element
+        return '<div style="display: none;"></div>', 200
         
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
@@ -255,12 +256,13 @@ def apply_cron() -> Any:
         total_jobs = sum(len(jobs) for jobs in all_jobs.values())
         logger.info(f"Apply cron called with {len(all_jobs)} zones and {total_jobs} total jobs")
         
-        if total_jobs == 0:
-            logger.warning("No jobs found in store when applying to cron")
-            return jsonify({"error": "No jobs found to apply"}), 400
-            
+        # Apply jobs to cron (this includes clearing cron if no jobs exist)
         cronblock.cron_manager.apply_jobs_to_cron()
-        logger.info("Successfully applied jobs to crontab")
+        
+        if total_jobs == 0:
+            logger.info("Successfully cleared all jobs from crontab")
+        else:
+            logger.info("Successfully applied jobs to crontab")
         
         return jsonify({"ok": True})
         
