@@ -197,27 +197,35 @@ window.AirCron.formatJobDiff = function (diffs) {
 
 // Close modal function
 window.AirCron.closeModal = function () {
-  document.getElementById("modal-container").innerHTML = "";
+  const modalContainer = document.getElementById("modal-container");
+  if (modalContainer) {
+    modalContainer.parentNode.removeChild(modalContainer);
+    // Recreate for next use
+    const newModal = document.createElement("div");
+    newModal.id = "modal-container";
+    document.body.appendChild(newModal);
+  }
 };
 
 // Show the cron review modal
 window.AirCron.showCronReviewModal = function () {
-  const modalContainer = document.getElementById("modal-container");
+  console.log("[AirCron] showCronReviewModal called");
+  let modalContainer = document.getElementById("modal-container");
   if (!modalContainer) {
-    console.error("Modal container not found!");
-    return;
+    // If missing, create it
+    modalContainer = document.createElement("div");
+    modalContainer.id = "modal-container";
+    document.body.appendChild(modalContainer);
   }
-
-  // Clear any existing content first
+  // Always clear any existing modal content to force a fresh load
   modalContainer.innerHTML = "";
-
   htmx
     .ajax("GET", "/modal/cron/review", {
       target: modalContainer,
       swap: "innerHTML",
+      headers: { "Cache-Control": "no-cache" },
     })
     .then(() => {
-      // Initialize the modal after content is loaded
       if (window.AirCron.initCronReviewModal) {
         window.AirCron.initCronReviewModal();
       }
@@ -226,8 +234,7 @@ window.AirCron.showCronReviewModal = function () {
 
 // Initialize cron review modal (called after HTMX loads content)
 window.AirCron.initCronReviewModal = function () {
-  console.log("Initializing cron review modal...");
-
+  console.log("[AirCron] initCronReviewModal called");
   // Modal state - scoped to this function to avoid global conflicts
   let reviewData = null;
   let showingCronDetails = false;
@@ -238,6 +245,7 @@ window.AirCron.initCronReviewModal = function () {
   }
 
   function loadReviewContent() {
+    console.log("[AirCron] loadReviewContent called");
     console.log("Loading review content...");
 
     // Reset state

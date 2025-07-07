@@ -9,7 +9,7 @@ from .api import api_bp
 from .views import views_bp
 
 
-def create_app() -> Flask:
+def create_app(config: dict = None) -> Flask:
     """Create and configure Flask application."""
     # Get the directory where this module is located
     import os
@@ -26,11 +26,19 @@ def create_app() -> Flask:
         SECRET_KEY="aircron-dev-key",  # Change for production
         JSON_SORT_KEYS=False,
     )
+    if config:
+        app.config.update(config)
     
     # Setup application support directory
-    app_support_dir = Path.home() / "Library" / "Application Support" / "AirCron"
-    app_support_dir.mkdir(parents=True, exist_ok=True)
-    app.config["APP_SUPPORT_DIR"] = app_support_dir
+    app_support_dir = app.config.get("APP_SUPPORT_DIR")
+    if not app_support_dir:
+        app_support_dir = Path.home() / "Library" / "Application Support" / "AirCron"
+        app_support_dir.mkdir(parents=True, exist_ok=True)
+        app.config["APP_SUPPORT_DIR"] = app_support_dir
+    else:
+        app_support_dir = Path(app_support_dir)
+        app_support_dir.mkdir(parents=True, exist_ok=True)
+        app.config["APP_SUPPORT_DIR"] = app_support_dir
     
     # Initialize global managers with app context
     with app.app_context():

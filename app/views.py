@@ -8,6 +8,7 @@ from flask import Blueprint, render_template
 
 from .jobs_store import JobsStore
 from .speakers import speaker_discovery
+from .cronblock import _normalize_cron_line
 
 logger = logging.getLogger(__name__)
 
@@ -151,11 +152,6 @@ def zone_view(zone_name: str) -> Any:
     except Exception as e:
         logger.error(f"Error loading zone {zone_name}: {e}")
         return f"<div class='text-red-500'>Error loading zone: {e}</div>", 500
-
-
-def _normalize_cron_line(line: str) -> str:
-    """Normalize cron line for comparison by removing extra spaces."""
-    return " ".join(line.split())
 
 
 @views_bp.route("/modal/add/<zone_name>")

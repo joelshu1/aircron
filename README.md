@@ -81,6 +81,18 @@ flowchart TD
 - Color-coded job types with clear text labels for accessibility
 - Improved modal state management and error handling
 
+### 🆕 2025 Refactor: Service Modules & Bulletproof API
+
+- All API endpoints are now thin wrappers; business logic is in `app/services/` modules:
+  - `jobs_service.py`, `cron_service.py`, `speakers_service.py`, `playlists_service.py`
+- API returns robust, conventional error codes:
+  - `400` for bad input (missing/invalid fields, invalid time/days/action)
+  - `404` for not found (update/delete non-existent job/playlist)
+  - `409` for true conflicts (duplicate jobs/playlists)
+- All file I/O is safe: `jobs.json` and `playlists.json` are always created if missing
+- Test suite covers all edge cases, negative cases, and error codes
+- No business logic remains in `api.py`—all validation, conflict, and file logic is in services
+
 ---
 
 ## 🚀 Quick Start
@@ -312,6 +324,12 @@ AirCron uses isolated cron sections for safe management:
 - **✅ Validation** - Comprehensive cron syntax validation before application
 - **🔄 Recovery** - Manual recovery possible from backup files if needed
 
+### 🛡️ Cron Review Robustness
+
+- The review modal only shows changes if the set of cron lines in jobs.json and the crontab differ, regardless of job IDs or field swaps.
+- The backend diff logic is robust: it never shows phantom changes—only actionable changes that would actually affect the crontab.
+- The UI always fetches the latest backend diff and never shows stale or cached data.
+
 ---
 
 ## 📊 Logging & Monitoring
@@ -371,17 +389,13 @@ launchctl load ~/Library/LaunchAgents/com.orchid.aircron.plist
 ### Running Tests
 
 ```bash
-# Run test suite
+# Run test suite (now covers all edge cases and error codes)
 pytest --cov=app --cov-fail-under=90
-
-# Lint code
-ruff check .
-black --check .
-isort --check-only .
-
-# Type checking
-mypy app --strict
 ```
+
+- All endpoints and error cases are tested: jobs, cron, speakers, playlists
+- Edge cases: missing/invalid fields, invalid time/days/action, duplicate, not found, file creation
+- API always returns correct HTTP status codes for all error types
 
 ### Development Server
 

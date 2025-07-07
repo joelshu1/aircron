@@ -70,8 +70,10 @@ class JobsStore:
             app_support_dir = Path.home() / "Library" / "Application Support" / "AirCron"
             app_support_dir.mkdir(parents=True, exist_ok=True)
         
-        self.jobs_file = app_support_dir / "jobs.json"
-        self._ensure_file_exists()
+        self.jobs_file = Path(app_support_dir) / "jobs.json"
+        if not self.jobs_file.exists():
+            self.jobs_file.parent.mkdir(parents=True, exist_ok=True)
+            self.jobs_file.write_text("{}")
     
     def _get_jobs_file_path(self) -> Path:
         """Get path to jobs.json file."""

@@ -7,6 +7,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
+import re
 
 from croniter import croniter
 
@@ -307,4 +308,11 @@ class CronManager:
 
 
 # Global instance - will be initialized when Flask app is created
-cron_manager: Optional[CronManager] = None 
+cron_manager: Optional[CronManager] = None
+
+def _normalize_cron_line(line: str) -> str:
+    """Normalize a cron line for comparison (strip, collapse whitespace, remove quotes)."""
+    line = line.strip()
+    line = re.sub(r'\s+', ' ', line)
+    line = line.replace('"', '').replace("'", '')
+    return line 
