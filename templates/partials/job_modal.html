@@ -320,17 +320,35 @@ form.addEventListener('submit', function(evt) {
             }
         } else {
             return response.json().then(data => {
-                throw new Error(data.error || 'Unknown error occurred');
+                // IMPROVED ERROR HANDLING: Show backend error in a visible notification or alert
+                let msg = data.error || 'Unknown error occurred';
+                if (window.AirCron && window.AirCron.showNotification) {
+                    window.AirCron.showNotification(msg, 'error');
+                } else {
+                    alert('Error: ' + msg);
+                }
+                throw new Error(msg);
             });
         }
     })
     .catch(error => {
-        alert('Error: ' + error.message);
         // Hide saving indicator
         document.getElementById('saving-indicator').classList.add('hidden');
         document.getElementById('save-text').classList.remove('hidden');
     });
 });
+
+// Force 24-hour time picker
+const timeInput = form.querySelector('input[type="time"]');
+if (timeInput) {
+    timeInput.setAttribute('step', '60'); // seconds granularity
+    // Try to force 24h format via input pattern (not all browsers respect this, but helps)
+    timeInput.setAttribute('pattern', '[0-2][0-9]:[0-5][0-9]');
+    // Set placeholder to 24h format
+    timeInput.setAttribute('placeholder', 'HH:mm');
+    // Optionally, set value to 00:00 if empty
+    if (!timeInput.value) timeInput.value = '07:00';
+}
 
 // Speaker multi-select logic
 function updateSpeakerCheckboxes() {
