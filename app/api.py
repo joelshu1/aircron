@@ -55,9 +55,12 @@ def get_jobs_for_zone(zone: str) -> Any:
 @api_bp.route("/jobs/<zone>", methods=["POST"])
 def create_job(zone: str) -> Any:
     """Create a new job for the specified zone."""
+    logger.info(f"[API] POST /jobs/{zone} - incoming request")
     try:
         data = request.get_json()
+        logger.info(f"[API] POST /jobs/{zone} - data: {data}")
         if not data:
+            logger.warning(f"[API] POST /jobs/{zone} - No JSON data provided")
             return jsonify({"error": "No JSON data provided"}), 400
         
         # Validate required fields
@@ -126,24 +129,27 @@ def create_job(zone: str) -> Any:
         )
         
         jobs_store.add_job(job)
-        logger.info(f"Created job {job_id} for zone {zone}")
+        logger.info(f"[API] POST /jobs/{zone} - Created job {job_id} for zone {zone}")
         
         return jsonify(job.to_dict()), 201
         
     except ValueError as e:
-        # Conflict or validation error
+        logger.warning(f"[API] POST /jobs/{zone} - ValueError: {e}")
         return jsonify({"error": str(e)}), 409
     except Exception as e:
-        logger.error(f"Error creating job for zone {zone}: {e}")
+        logger.error(f"[API] POST /jobs/{zone} - Exception: {e}", exc_info=True)
         return jsonify({"error": "Failed to create job"}), 500
 
 
 @api_bp.route("/jobs/<zone>/<job_id>", methods=["PUT"])
 def update_job(zone: str, job_id: str) -> Any:
     """Update an existing job."""
+    logger.info(f"[API] PUT /jobs/{zone}/{job_id} - incoming request")
     try:
         data = request.get_json()
+        logger.info(f"[API] PUT /jobs/{zone}/{job_id} - data: {data}")
         if not data:
+            logger.warning(f"[API] PUT /jobs/{zone}/{job_id} - No JSON data provided")
             return jsonify({"error": "No JSON data provided"}), 400
         
         # Validate fields if provided (partial updates allowed)
@@ -209,34 +215,37 @@ def update_job(zone: str, job_id: str) -> Any:
             return jsonify({"error": "Invalid cron syntax"}), 400
         
         jobs_store.update_job(updated_job)
-        logger.info(f"Updated job {job_id} in zone {zone}")
+        logger.info(f"[API] PUT /jobs/{zone}/{job_id} - Updated job {job_id} in zone {zone}")
         
         return jsonify(updated_job.to_dict())
         
     except ValueError as e:
+        logger.warning(f"[API] PUT /jobs/{zone}/{job_id} - ValueError: {e}")
         return jsonify({"error": str(e)}), 409
     except Exception as e:
-        logger.error(f"Error updating job {job_id} in zone {zone}: {e}")
+        logger.error(f"[API] PUT /jobs/{zone}/{job_id} - Exception: {e}", exc_info=True)
         return jsonify({"error": "Failed to update job"}), 500
 
 
 @api_bp.route("/jobs/<zone>/<job_id>", methods=["DELETE"])
 def delete_job(zone: str, job_id: str) -> Any:
     """Delete a job."""
+    logger.info(f"[API] DELETE /jobs/{zone}/{job_id} - incoming request")
     try:
         from flask import current_app
         app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
         jobs_store = JobsStore(app_support_dir)
         jobs_store.delete_job(zone, job_id)
-        logger.info(f"Deleted job {job_id} from zone {zone}")
+        logger.info(f"[API] DELETE /jobs/{zone}/{job_id} - Deleted job {job_id} from zone {zone}")
         
         # Return empty div for HTMX to replace the deleted job element
         return '<div style="display: none;"></div>', 200
         
     except ValueError as e:
+        logger.warning(f"[API] DELETE /jobs/{zone}/{job_id} - ValueError: {e}")
         return jsonify({"error": str(e)}), 404
     except Exception as e:
-        logger.error(f"Error deleting job {job_id} from zone {zone}: {e}")
+        logger.error(f"[API] DELETE /jobs/{zone}/{job_id} - Exception: {e}", exc_info=True)
         return jsonify({"error": "Failed to delete job"}), 500
 
 

@@ -95,11 +95,12 @@ class JobsStore:
     def _save_jobs(self, jobs: Dict[str, List[Dict[str, Any]]]) -> None:
         """Save all jobs to JSON file."""
         try:
+            logger.info(f"[JobsStore] Saving jobs to {self.jobs_file} - jobs: {jobs}")
             with self.jobs_file.open("w") as f:
                 json.dump(jobs, f, indent=2)
-            logger.info("Jobs saved successfully")
+            logger.info(f"[JobsStore] Jobs saved successfully to {self.jobs_file}")
         except Exception as e:
-            logger.error(f"Error saving jobs: {e}")
+            logger.error(f"[JobsStore] Error saving jobs: {e}")
             raise
     
     def get_jobs_for_zone(self, zone: str) -> List[Job]:
@@ -118,8 +119,9 @@ class JobsStore:
     
     def add_job(self, job: Job) -> None:
         """Add a new job."""
+        logger.info(f"[JobsStore] add_job called with job: {job.to_dict()}")
         all_jobs = self._load_jobs()
-        logger.info(f"Loading jobs for add_job: found {len(all_jobs)} zones with {sum(len(jobs) for jobs in all_jobs.values())} total jobs")
+        logger.info(f"[JobsStore] add_job loaded jobs: {all_jobs}")
         
         # Validate no conflicts (same time + overlapping days in same zone)
         existing_jobs = self.get_jobs_for_zone(job.zone)
@@ -135,15 +137,17 @@ class JobsStore:
             logger.info(f"Created new zone: {job.zone}")
         
         all_jobs[job.zone].append(job.to_dict())
-        logger.info(f"Added job {job.id} to zone {job.zone}. Zone now has {len(all_jobs[job.zone])} jobs")
+        logger.info(f"[JobsStore] add_job: Added job {job.id} to zone {job.zone}. Zone now has {len(all_jobs[job.zone])} jobs")
         
         self._save_jobs(all_jobs)
-        logger.info(f"Saved jobs to disk. Total zones: {len(all_jobs)}, total jobs: {sum(len(jobs) for jobs in all_jobs.values())}")
-        logger.info(f"Added job {job.id} for zone {job.zone}")
+        logger.info(f"[JobsStore] add_job: Saved jobs after adding job {job.id}")
+        logger.info(f"[JobsStore] add_job: Added job {job.id} for zone {job.zone}")
     
     def update_job(self, job: Job) -> None:
         """Update an existing job."""
+        logger.info(f"[JobsStore] update_job called with job: {job.to_dict()}")
         all_jobs = self._load_jobs()
+        logger.info(f"[JobsStore] update_job loaded jobs: {all_jobs}")
         
         if job.zone not in all_jobs:
             raise ValueError(f"Zone {job.zone} not found")
@@ -160,15 +164,18 @@ class JobsStore:
                         )
                 
                 zone_jobs[i] = job.to_dict()
+                logger.info(f"[JobsStore] update_job: Updated job {job.id}")
                 self._save_jobs(all_jobs)
-                logger.info(f"Updated job {job.id}")
+                logger.info(f"[JobsStore] update_job: Saved jobs after updating job {job.id}")
                 return
         
         raise ValueError(f"Job {job.id} not found in zone {job.zone}")
     
     def delete_job(self, zone: str, job_id: str) -> None:
         """Delete a job."""
+        logger.info(f"[JobsStore] delete_job called with zone: {zone}, job_id: {job_id}")
         all_jobs = self._load_jobs()
+        logger.info(f"[JobsStore] delete_job loaded jobs: {all_jobs}")
         
         if zone not in all_jobs:
             raise ValueError(f"Zone {zone} not found")
@@ -179,8 +186,9 @@ class JobsStore:
                 del zone_jobs[i]
                 if not zone_jobs:
                     del all_jobs[zone]
+                logger.info(f"[JobsStore] delete_job: Deleted job {job_id} from zone {zone}")
                 self._save_jobs(all_jobs)
-                logger.info(f"Deleted job {job_id} from zone {zone}")
+                logger.info(f"[JobsStore] delete_job: Saved jobs after deleting job {job_id}")
                 return
         
         raise ValueError(f"Job {job_id} not found in zone {zone}")
