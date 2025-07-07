@@ -233,7 +233,9 @@ form.addEventListener('submit', function(evt) {
     evt.preventDefault();
     const formData = new FormData(form);
     // Collect checked days
-    const daysChecked = Array.from(formData.getAll('days')).map(day => parseInt(day));
+    const daysChecked = Array.from(formData.getAll('days'))
+        .map(day => parseInt(day, 10))
+        .filter(day => !isNaN(day));
     if (daysChecked.length === 0) {
         alert('Please select at least one day');
         return;
@@ -273,6 +275,8 @@ form.addEventListener('submit', function(evt) {
     }
     // Add label
     requestData.label = formData.get('label') || '';
+    // Debug log
+    console.log('Submitting job:', requestData);
     // Show saving indicator
     document.getElementById('saving-indicator').classList.remove('hidden');
     document.getElementById('save-text').classList.add('hidden');

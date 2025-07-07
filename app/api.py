@@ -79,6 +79,7 @@ def create_job(zone: str) -> Any:
         
         # Validate days
         days = data["days"]
+        days = [int(day) for day in days]
         if not isinstance(days, list) or not days:
             return jsonify({"error": "Days must be a non-empty list"}), 400
         
@@ -159,6 +160,7 @@ def update_job(zone: str, job_id: str) -> Any:
         
         if "days" in data:
             days = data["days"]
+            days = [int(day) for day in days]
             if not isinstance(days, list) or not days:
                 return jsonify({"error": "Days must be a non-empty list"}), 400
             
