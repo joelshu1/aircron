@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""AirCron UI - Tray application entry point."""
+"""AirCron UI - Flask server entry point (no tray)."""
 
 import logging
 import shutil
@@ -7,8 +7,6 @@ import threading
 import webbrowser
 from pathlib import Path
 from typing import Optional
-
-import rumps
 
 from app import create_app
 
@@ -59,59 +57,31 @@ def check_dependencies() -> None:
         raise RuntimeError('cron not found in PATH')
 
 
-class AirCronApp(rumps.App):
-    """AirCron tray application."""
-
-    def __init__(self) -> None:
-        super().__init__("AirCron", icon=None, quit_button="Quit AirCron")
-        self.flask_app: Optional[object] = None
-        self.flask_thread: Optional[threading.Thread] = None
-        self.port = 3009
-
-    def start_flask(self) -> None:
-        """Start Flask server in background thread."""
-        self.flask_app = create_app()
-        self.flask_thread = threading.Thread(
-            target=lambda: self.flask_app.run(host="127.0.0.1", port=self.port, debug=False),
-            daemon=True
-        )
-        self.flask_thread.start()
-        logging.info(f"Flask server started on port {self.port}")
-
-    @rumps.clicked("Open AirCron")
-    def open_ui(self, _) -> None:
-        """Open the web UI in default browser."""
-        webbrowser.open(f"http://127.0.0.1:{self.port}")
-
-    @rumps.clicked("Refresh Speakers")
-    def refresh_speakers(self, _) -> None:
-        """Trigger speaker refresh."""
-        # This will be implemented when we add the speakers module
-        logging.info("Speaker refresh requested")
-        rumps.notification("AirCron", "Speakers Refreshed", "Updated available speaker zones")
-
-
 def main() -> None:
-    """Main entry point."""
+    """Main entry point (no tray)."""
     setup_logging()
     
     try:
         check_dependencies()
     except RuntimeError as e:
         logging.error(f"Dependency check failed: {e}")
-        rumps.alert(f"AirCron Setup Error", f"{e}")
         return
 
-    app = AirCronApp()
-    
-    # Start Flask server
-    app.start_flask()
-    
+    flask_app = create_app()
+    port = 3009
+
+    def run_flask():
+        flask_app.run(host="127.0.0.1", port=port, debug=False)
+
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    logging.info(f"Flask server started on port {port}")
+
     # Open browser on first launch
-    webbrowser.open(f"http://127.0.0.1:{app.port}")
-    
-    # Start tray app (blocks)
-    app.run()
+    webbrowser.open(f"http://127.0.0.1:{port}")
+
+    # Wait for Flask thread to finish (block main thread)
+    flask_thread.join()
 
 
 if __name__ == "__main__":
