@@ -73,7 +73,7 @@
     
     // Load cron jobs content
     function loadCronJobsContent() {
-        fetch('/api/cron/jobs')
+        fetch('/api/cron/all')
             .then(response => response.json())
             .then(data => {
                 const container = document.getElementById('cron-jobs-content');

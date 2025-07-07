@@ -281,8 +281,18 @@ form.addEventListener('submit', function(evt) {
     document.getElementById('saving-indicator').classList.remove('hidden');
     document.getElementById('save-text').classList.add('hidden');
     // Make API request
-    fetch(`/api/jobs/${encodeURIComponent(targetZone)}` + (form.dataset.method === 'PUT' ? `/${form.dataset.url.split('/').pop()}` : ''), {
-        method: form.dataset.method,
+    let fetchUrl, fetchMethod;
+    if (form.dataset.method === 'PUT') {
+        // For edit, always use the original zone and job id from data-url
+        fetchUrl = form.dataset.url;
+        fetchMethod = 'PUT';
+    } else {
+        // For add, use the new zone
+        fetchUrl = `/api/jobs/${encodeURIComponent(targetZone)}`;
+        fetchMethod = 'POST';
+    }
+    fetch(fetchUrl, {
+        method: fetchMethod,
         headers: {
             'Content-Type': 'application/json',
         },
@@ -300,22 +310,34 @@ form.addEventListener('submit', function(evt) {
             
             // Always refresh the current schedules tab to show all jobs properly
             const schedulesContent = document.getElementById('schedules-content');
+            // Always update window.currentZone to the new zone
+            window.currentZone = targetZone;
             if (schedulesContent) {
-                // If we're creating a job for a different zone than currently displayed,
-                // switch to that zone first
-                if (targetZone && targetZone !== window.currentZone && typeof updateCurrentZone === 'function') {
-                    updateCurrentZone(targetZone);
-                    // The updateCurrentZone function should handle the refresh
-                } else if (window.currentZone) {
-                    // Refresh current zone
-                    htmx.ajax('GET', '/zone/' + encodeURIComponent(window.currentZone), '#schedules-content');
-                } else {
-                    // Fallback: refresh with the target zone
-                    htmx.ajax('GET', '/zone/' + encodeURIComponent(targetZone), '#schedules-content');
-                    if (typeof updateCurrentZone === 'function') {
+                if (typeof updateCurrentZone === 'function') {
+                    try {
                         updateCurrentZone(targetZone);
+                    } catch (e) {
+                        if (window.AirCron && window.AirCron.showNotification) {
+                            window.AirCron.showNotification('Zone refresh failed, reloading page...', 'error');
+                        }
+                        location.reload();
                     }
+                } else {
+                    // Fallback: force refresh
+                    htmx.ajax('GET', '/zone/' + encodeURIComponent(targetZone), '#schedules-content')
+                        .catch(() => {
+                            if (window.AirCron && window.AirCron.showNotification) {
+                                window.AirCron.showNotification('Zone refresh failed, reloading page...', 'error');
+                            }
+                            location.reload();
+                        });
                 }
+            } else {
+                // If schedulesContent is missing, reload the page as a last resort
+                if (window.AirCron && window.AirCron.showNotification) {
+                    window.AirCron.showNotification('Schedules tab missing, reloading...', 'error');
+                }
+                location.reload();
             }
             
             // Refresh cron status

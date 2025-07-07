@@ -97,9 +97,11 @@ def update_job(zone: str, job_id: str, data: dict) -> Dict[str, Any]:
     args = data.get("args", existing_job.args)
     label = data.get("label", getattr(existing_job, "label", ""))
     time_val = data.get("time", existing_job.time)
+    # Determine new zone (may be different from old zone)
+    new_zone = data.get("zone", zone)
     updated_job = Job(
         job_id=job_id,
-        zone=zone,
+        zone=new_zone,
         days=days,
         time=time_val,
         action=action,
@@ -111,8 +113,14 @@ def update_job(zone: str, job_id: str, data: dict) -> Dict[str, Any]:
         cronblock.cron_manager = cronblock.CronManager(app_support_dir)
     if not cronblock.cron_manager.validate_cron_syntax(updated_job.time, updated_job.days):
         raise ValueError("Invalid cron syntax")
-    jobs_store.update_job(updated_job)
-    logger.info(f"[jobs_service] Updated job {job_id} in zone {zone}")
+    # If zone changed, remove from old zone and add to new zone
+    if new_zone != zone:
+        jobs_store.delete_job(zone, job_id)
+        jobs_store.add_job(updated_job)
+        logger.info(f"[jobs_service] Moved job {job_id} from zone {zone} to {new_zone}")
+    else:
+        jobs_store.update_job(updated_job)
+        logger.info(f"[jobs_service] Updated job {job_id} in zone {zone}")
     return updated_job.to_dict()
 
 def delete_job(zone: str, job_id: str) -> None:

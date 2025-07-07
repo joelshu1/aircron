@@ -90,105 +90,90 @@ def get_cron_preview() -> Dict[str, Any]:
     status_data = get_cron_status()
     if status_data.get("error"):
         return status_data
-    # Add timestamp for debug
     now = datetime.now().isoformat()
     logger.info(f"[cron_service] get_cron_preview called at {now}")
-    # Log current crontab lines
     current_lines = cronblock.cron_manager._get_current_crontab()
     logger.info(f"[cron_service] Current crontab lines: {current_lines}")
-    # Log jobs.json contents
     app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
     jobs_store = JobsStore(app_support_dir)
     all_jobs = jobs_store.get_all_jobs()
     logger.info(f"[cron_service] jobs.json contents: {all_jobs}")
-    # Log normalized cron lines
     current_cron_jobs = set(status_data["current_cron_jobs"])
     expected_cron_jobs = set(status_data["expected_cron_jobs"])
     logger.info(f"[cron_service] Normalized current_cron_jobs: {current_cron_jobs}")
     logger.info(f"[cron_service] Normalized expected_cron_jobs: {expected_cron_jobs}")
-    # If the sets are identical, there are no changes to apply
-    if current_cron_jobs == expected_cron_jobs:
-        logger.info(f"[cron_service] No changes to apply: crontab and jobs.json are in sync.")
-        return {
-            "has_changes": False,
-            "total_changes": 0,
-            "job_details": [],
-            "changed_jobs": [],
-            "timestamp": now
-        }
-    # Compute diffs
-    jobs_to_add = expected_cron_jobs - current_cron_jobs
-    jobs_to_remove = current_cron_jobs - expected_cron_jobs
-    jobs_unchanged = current_cron_jobs & expected_cron_jobs
-    logger.info(f"[cron_service] jobs_to_add: {jobs_to_add}")
-    logger.info(f"[cron_service] jobs_to_remove: {jobs_to_remove}")
-    logger.info(f"[cron_service] jobs_unchanged: {jobs_unchanged}")
-    # Build job_details and changed_jobs as before
+    # Build job dicts by ID
+    expected_jobs_by_id = {}
+    current_jobs_by_id = {}
     cron_to_job = {}
-    id_to_job = {}
     for zone, jobs in all_jobs.items():
         for job in jobs:
+            expected_jobs_by_id[job.id] = job
             cron_line = cronblock.cron_manager._job_to_cron_line(job)
             if cron_line:
                 norm_line = _normalize_cron_line(cron_line)
                 cron_to_job[norm_line] = job
-                id_to_job[job.id] = job
-    job_details = []
-    changed_jobs = []
-    crontab_lines = list(current_cron_jobs)
+    # Find jobs in crontab by parsing lines
+    crontab_jobs_by_id = {}
     for zone, jobs in all_jobs.items():
         for job in jobs:
-            expected_line = _normalize_cron_line(cronblock.cron_manager._job_to_cron_line(job))
-            if expected_line in jobs_to_add:
+            cron_line = cronblock.cron_manager._job_to_cron_line(job)
+            if cron_line and _normalize_cron_line(cron_line) in current_cron_jobs:
+                crontab_jobs_by_id[job.id] = job
+    # Diff by job ID
+    job_details = []
+    changed_jobs = []
+    # 1. Changed jobs (present in both, but fields differ)
+    for job_id, expected_job in expected_jobs_by_id.items():
+        current_job = crontab_jobs_by_id.get(job_id)
+        if current_job:
+            diffs = []
+            for field in ["time", "days", "action", "args", "label", "zone"]:
+                v1 = getattr(expected_job, field, None)
+                v2 = getattr(current_job, field, None)
+                if v1 != v2:
+                    diffs.append({"field": field, "old": v2, "new": v1})
+            if diffs:
                 job_details.append({
-                    "zone": job.zone,
-                    "job": job.to_dict(),
-                    "cron_line": expected_line,
-                    "status": "will_add"
+                    "zone": expected_job.zone,
+                    "job": expected_job.to_dict(),
+                    "cron_line": cronblock.cron_manager._job_to_cron_line(expected_job),
+                    "status": "changed",
+                    "diffs": diffs
                 })
-            else:
-                for line in crontab_lines:
-                    cr_job = cron_to_job.get(line)
-                    if not cr_job:
-                        continue
-                    diffs = []
-                    for field in ["time", "days", "action", "args", "label"]:
-                        v1 = getattr(job, field, None)
-                        v2 = getattr(cr_job, field, None)
-                        if v1 != v2:
-                            diffs.append({"field": field, "old": v2, "new": v1})
-                    if diffs:
-                        job_details.append({
-                            "zone": job.zone,
-                            "job": job.to_dict(),
-                            "cron_line": expected_line,
-                            "status": "changed",
-                            "diffs": diffs
-                        })
-                        changed_jobs.append({
-                            "old_job": cr_job.to_dict(),
-                            "new_job": job.to_dict(),
-                            "diffs": diffs
-                        })
-                        break
-    for line in jobs_to_remove:
-        job = None
-        job_details.append({
-            "zone": None,
-            "job": None,
-            "cron_line": line,
-            "status": "will_remove"
-        })
-    for line in jobs_unchanged:
-        job = cron_to_job.get(line)
-        if job:
+                changed_jobs.append({
+                    "old_job": current_job.to_dict(),
+                    "new_job": expected_job.to_dict(),
+                    "diffs": diffs
+                })
+    # 2. Added jobs (in expected, not in crontab)
+    for job_id, expected_job in expected_jobs_by_id.items():
+        if job_id not in crontab_jobs_by_id:
             job_details.append({
-                "zone": job.zone,
-                "job": job.to_dict(),
-                "cron_line": line,
-                "status": "unchanged"
+                "zone": expected_job.zone,
+                "job": expected_job.to_dict(),
+                "cron_line": cronblock.cron_manager._job_to_cron_line(expected_job),
+                "status": "will_add"
             })
-    total_changes = sum(1 for d in job_details if d["status"] != "unchanged")
+    # 3. Removed jobs (in crontab, not in expected)
+    for job_id, current_job in crontab_jobs_by_id.items():
+        if job_id not in expected_jobs_by_id:
+            job_details.append({
+                "zone": current_job.zone,
+                "job": current_job.to_dict(),
+                "cron_line": cronblock.cron_manager._job_to_cron_line(current_job),
+                "status": "will_remove"
+            })
+    # 4. Orphaned cron lines (in crontab, not mapped to any job)
+    for line in current_cron_jobs:
+        if line not in [ _normalize_cron_line(cronblock.cron_manager._job_to_cron_line(job)) for job in crontab_jobs_by_id.values() ]:
+            job_details.append({
+                "zone": None,
+                "job": None,
+                "cron_line": line,
+                "status": "will_remove"
+            })
+    total_changes = len(job_details)
     has_changes = total_changes > 0
     logger.info(f"[cron_service] changed_jobs: {changed_jobs}")
     logger.info(f"[cron_service] Returning preview: has_changes={has_changes}, total_changes={total_changes}")
@@ -234,17 +219,17 @@ def get_all_cron_jobs() -> Dict[str, Any]:
     if status_data.get("error"):
         return status_data
     current_cron_jobs = set(status_data["current_cron_jobs"])
-    applied_jobs = {}
+    jobs_with_status = {}
     for zone, jobs in all_jobs.items():
-        zone_applied_jobs = []
+        jobs_with_status[zone] = []
         for job in jobs:
             cron_line = cronblock.cron_manager._job_to_cron_line(job)
+            status = "pending"
             if cron_line and _normalize_cron_line(cron_line) in current_cron_jobs:
-                zone_applied_jobs.append(job.to_dict())
-        if zone_applied_jobs:
-            applied_jobs[zone] = zone_applied_jobs
+                status = "applied"
+            jobs_with_status[zone].append({**job.to_dict(), "status": status})
     return {
-        "zones": applied_jobs,
-        "total_jobs": sum(len(jobs) for jobs in applied_jobs.values()),
-        "has_jobs": len(applied_jobs) > 0
+        "zones": jobs_with_status,
+        "total_jobs": sum(len(jobs) for jobs in jobs_with_status.values()),
+        "has_jobs": len(jobs_with_status) > 0
     } 

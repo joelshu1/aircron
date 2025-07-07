@@ -4,7 +4,7 @@ import logging
 import json
 from typing import Any
 
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, request
 
 from .jobs_store import JobsStore
 from .speakers import speaker_discovery
@@ -20,7 +20,6 @@ def index() -> Any:
     """Main application page."""
     try:
         # Get zone from URL parameter if provided
-        from flask import request
         requested_zone = request.args.get('zone', 'All Speakers')
         
         # Get speakers and jobs for initial load
@@ -74,12 +73,30 @@ def index() -> Any:
             else:
                 job['status'] = 'unknown'
         
+        # Always aggregate zones for sidebar from all jobs
+        all_jobs_full = jobs_store.get_all_jobs()
+        composite_zones = []
+        individual_speakers = []
+        for zone in all_jobs_full:
+            if zone == "All Speakers":
+                continue
+            if zone.startswith("Custom:"):
+                speakers = [s.strip() for s in zone.replace("Custom:", "").split(",")]
+                if len(speakers) > 1:
+                    composite_zones.append(zone)
+            else:
+                individual_speakers.append(zone)
+        composite_zones = sorted(composite_zones)
+        individual_speakers = sorted(individual_speakers)
+        
         return render_template(
             "index.html",
             speakers=speakers,
             current_zone=current_zone,
             current_jobs=current_jobs,
-            all_jobs=all_jobs
+            all_jobs=all_jobs,
+            composite_zones=composite_zones,
+            individual_speakers=individual_speakers
         )
     except Exception as e:
         logger.error(f"Error loading index page: {e}")
@@ -144,10 +161,40 @@ def zone_view(zone_name: str) -> Any:
             else:
                 job['status'] = 'unknown'
         
+        # Always aggregate zones for sidebar from all jobs
+        all_jobs_full = jobs_store.get_all_jobs()
+        composite_zones = []
+        individual_speakers = []
+        for zone in all_jobs_full:
+            if zone == "All Speakers":
+                continue
+            if zone.startswith("Custom:"):
+                speakers = [s.strip() for s in zone.replace("Custom:", "").split(",")]
+                if len(speakers) > 1:
+                    composite_zones.append(zone)
+            else:
+                individual_speakers.append(zone)
+        composite_zones = sorted(composite_zones)
+        individual_speakers = sorted(individual_speakers)
+        
+        # If ?cron=1, render all_cron_jobs.html for the cron jobs tab
+        if request.args.get('cron') == '1':
+            zones = {zone_name: jobs}
+            total_jobs = len(jobs)
+            return render_template(
+                "partials/all_cron_jobs.html",
+                zones=zones,
+                total_jobs=total_jobs,
+                composite_zones=composite_zones,
+                individual_speakers=individual_speakers
+            )
+        # Otherwise, render jobs_list.html for the schedule tab
         return render_template(
             "partials/jobs_list.html",
             zone=zone_name,
-            jobs=jobs
+            jobs=jobs,
+            composite_zones=composite_zones,
+            individual_speakers=individual_speakers
         )
     except Exception as e:
         logger.error(f"Error loading zone {zone_name}: {e}")
@@ -200,9 +247,6 @@ def edit_job_modal(zone_name: str, job_id: str) -> Any:
 def cron_review_modal() -> Any:
     """Show cron review modal (HTMX partial)."""
     return render_template("partials/cron_review_modal.html")
-
-
-
 
 
 @views_bp.route("/modal/playlist/add")

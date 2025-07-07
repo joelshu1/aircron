@@ -4,60 +4,49 @@
         <h2 class="font-semibold text-gray-800">Speakers</h2>
     </div>
     
-    <!-- Speaker Selection Area -->
-    <div class="p-4">
-        <div class="mb-4">
-            <div class="flex justify-between items-center mb-2">
-                <label class="text-sm font-medium text-gray-700">Select Speakers</label>
-                <div class="space-x-2">
-                    <button onclick="selectAllSpeakers()" class="text-xs text-blue-500 hover:text-blue-700">All</button>
-                    <button onclick="deselectAllSpeakers()" class="text-xs text-gray-500 hover:text-gray-700">None</button>
-                </div>
-            </div>
-            <div id="speaker-checkboxes" class="space-y-1 max-h-40 overflow-y-auto border rounded p-2">
-                <!-- Speaker checkboxes will be loaded here -->
-            </div>
-            <div id="selected-count" class="text-xs text-gray-500 mt-1">0 speakers selected</div>
-        </div>
-    </div>
-    
     <!-- Navigation Buttons -->
     <div class="border-t">
         <button 
+            onclick="if(document.getElementById('tab-content-cron-jobs').classList.contains('active')){window.AirCron.refreshCronJobsZone('All Speakers');}else{updateCurrentZone('All Speakers');}"
             hx-get="/zone/All%20Speakers"
             hx-target="#schedules-content"
             hx-swap="innerHTML"
-            onclick="updateCurrentZone('All Speakers')"
             class="w-full text-left p-3 hover:bg-gray-100 transition border-b
                    {% if current_zone == 'All Speakers' %}bg-blue-100{% endif %}"
         >
             ▾ All Speakers
         </button>
         
-        <!-- Individual Speaker Zones -->
-        <div id="individual-speakers">
-            {% for speaker in speakers %}
-            {% if speaker != "All Speakers" %}
+        <!-- Composite Speaker Zones (with jobs) -->
+        <div id="composite-speakers">
+            {% for zone in composite_zones %}
             <button 
+                onclick="if(document.getElementById('tab-content-cron-jobs').classList.contains('active')){window.AirCron.refreshCronJobsZone('{{ zone }}');}else{updateCurrentZone('{{ zone }}');}"
+                hx-get="/zone/{{ zone }}"
+                hx-target="#schedules-content"
+                hx-swap="innerHTML"
+                class="w-full text-left p-3 hover:bg-gray-100 transition border-b
+                       {% if zone == current_zone %}bg-blue-100{% endif %}"
+            >
+                🎵 {{ zone.replace('Custom:', '').replace(',', ' + ') }}
+            </button>
+            {% endfor %}
+        </div>
+        
+        <!-- Individual Speaker Zones (with jobs) -->
+        <div id="individual-speakers">
+            {% for speaker in individual_speakers %}
+            <button 
+                onclick="if(document.getElementById('tab-content-cron-jobs').classList.contains('active')){window.AirCron.refreshCronJobsZone('{{ speaker }}');}else{updateCurrentZone('{{ speaker }}');}"
                 hx-get="/zone/{{ speaker }}"
                 hx-target="#schedules-content"
                 hx-swap="innerHTML"
-                onclick="updateCurrentZone('{{ speaker }}')"
                 class="w-full text-left p-3 hover:bg-gray-100 transition border-b
                        {% if speaker == current_zone %}bg-blue-100{% endif %}"
             >
                 ▸ {{ speaker }}
             </button>
-            {% endif %}
             {% endfor %}
-        </div>
-        
-        <!-- Composite Speakers Section -->
-        <div class="border-t pt-2">
-            <div class="px-3 py-2 text-sm font-medium text-gray-600">Composite Speakers</div>
-            <div id="composite-speakers">
-                <!-- Composite speaker zones will be loaded here -->
-            </div>
         </div>
     </div>
 </aside> 

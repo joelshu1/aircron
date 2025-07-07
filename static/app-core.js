@@ -22,6 +22,16 @@ window.AirCron.updateAddScheduleButton = function (zoneName) {
   }
 };
 
+window.AirCron.refreshCronJobsZone = function (zoneName) {
+  if (zoneName) {
+    htmx.ajax(
+      "GET",
+      `/zone/${encodeURIComponent(zoneName)}?cron=1`,
+      "#cron-jobs-content"
+    );
+  }
+};
+
 // HTMX event handlers for cross-module coordination
 if (window.htmx) {
   document.body.addEventListener("htmx:afterSwap", function (evt) {
@@ -32,3 +42,29 @@ if (window.htmx) {
     }
   });
 }
+
+// Patch closeModal to also reload the sidebar after job add/edit
+const originalCloseModal = window.AirCron.closeModal;
+window.AirCron.closeModal = function () {
+  if (typeof originalCloseModal === "function") originalCloseModal();
+  // Find the active tab and reload the sidebar accordingly
+  if (
+    document
+      .getElementById("tab-content-cron-jobs")
+      .classList.contains("active")
+  ) {
+    // Reload the current zone in cron jobs tab (which also reloads sidebar)
+    const activeZoneBtn = document.querySelector("#sidebar button.bg-blue-100");
+    const zone = activeZoneBtn
+      ? activeZoneBtn.textContent.trim().replace(/^([▾▸🎵]+)\s*/, "")
+      : "All Speakers";
+    window.AirCron.refreshCronJobsZone(zone);
+  } else {
+    // Reload the current zone in schedules tab
+    const activeZoneBtn = document.querySelector("#sidebar button.bg-blue-100");
+    const zone = activeZoneBtn
+      ? activeZoneBtn.textContent.trim().replace(/^([▾▸🎵]+)\s*/, "")
+      : "All Speakers";
+    window.AirCron.refreshZone(zone);
+  }
+};

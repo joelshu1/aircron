@@ -530,6 +530,15 @@ window.AirCron.initCronReviewModal = function () {
           ) {
             window.AirCron.refreshZone(window.currentZone);
           }
+          // Always refresh allJobs after apply to avoid stale state
+          fetch("/api/jobs/all")
+            .then((r) => r.json())
+            .then((data) => {
+              window.allJobs = data.jobs || [];
+              if (window.AirCron.renderHourlyTable) {
+                window.AirCron.renderHourlyTable();
+              }
+            });
         } else {
           throw new Error(data.error || "Failed to apply changes");
         }

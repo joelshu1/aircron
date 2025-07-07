@@ -16,17 +16,39 @@ document.addEventListener("DOMContentLoaded", function () {
     initLegacyFeatures();
   }
 
-  // Playlist modal save handler
+  // Job modal save handler
   document.body.addEventListener("submit", function (e) {
     const form = e.target;
-    if (form && form.id === "playlist-form") {
+    if (form && form.id === "job-form") {
       e.preventDefault();
       const formData = new FormData(form);
-      const data = {
-        name: formData.get("name")?.trim() || "",
-        description: formData.get("description")?.trim() || "",
-        uri: formData.get("uri")?.trim() || "",
-      };
+      // Build zone string from selected speakers
+      const speakers = formData
+        .getAll("speakers")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      let zone = "";
+      if (speakers.length === 1) {
+        zone = speakers[0];
+      } else if (speakers.length > 1) {
+        if (speakers.includes("All Speakers")) {
+          zone = "All Speakers";
+        } else {
+          zone = "Custom:" + speakers.join(",");
+        }
+      }
+      // Build job data
+      const days = formData.getAll("days").map(Number);
+      const time = formData.get("time");
+      const action = formData.get("action");
+      const label = formData.get("label")?.trim() || "";
+      const args = {};
+      if (action === "play") {
+        args.uri = formData.get("uri")?.trim() || "";
+      } else if (action === "volume") {
+        args.volume = Number(formData.get("volume"));
+      }
+      const data = { days, time, action, args, label, zone };
       const url = form.getAttribute("data-url");
       const method = form.getAttribute("data-method") || "POST";
       const saveBtn = form.querySelector("button[type='submit']");
@@ -52,7 +74,7 @@ document.addEventListener("DOMContentLoaded", function () {
         .then(() => {
           if (window.AirCron && window.AirCron.showNotification) {
             window.AirCron.showNotification(
-              method === "POST" ? "Playlist saved" : "Playlist updated",
+              method === "POST" ? "Schedule saved" : "Schedule updated",
               "success"
             );
           }
@@ -62,15 +84,11 @@ document.addEventListener("DOMContentLoaded", function () {
           ) {
             window.AirCron.closeModal();
           }
-          // Refresh playlists tab if present
-          if (typeof loadPlaylistsContent === "function") {
-            loadPlaylistsContent();
-          }
         })
         .catch((err) => {
           if (window.AirCron && window.AirCron.showNotification) {
             window.AirCron.showNotification(
-              err.message || "Failed to save playlist",
+              err.message || "Failed to save schedule",
               "error"
             );
           }

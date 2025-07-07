@@ -81,6 +81,13 @@ flowchart TD
 - Color-coded job types with clear text labels for accessibility
 - Improved modal state management and error handling
 
+**✅ 2025-07-07 - Robust Cron Diff, UI Sync, and Edit Reliability**
+
+- **Cron Review Modal Diff**: Jobs are now matched by unique ID, so edits show as 'changed' (with field-by-field diffs), not as add/remove pairs. No more swap confusion or spurious changes.
+- **UI State Sync**: After applying cron changes, the UI always re-fetches all jobs and updates all views, so you never see stale or invisible jobs.
+- **Reliable Job Editing**: Editing a job always updates the correct job, even if you change speakers/zones in the modal. No more silent discards.
+- **Zone Refresh Robustness**: The UI always refreshes the correct zone and job list after any add/edit/apply, with fallback to reload if needed.
+
 ### 🆕 2025 Refactor: Service Modules & Bulletproof API
 
 - All API endpoints are now thin wrappers; business logic is in `app/services/` modules:
@@ -330,6 +337,10 @@ AirCron uses isolated cron sections for safe management:
 - The backend diff logic is robust: it never shows phantom changes—only actionable changes that would actually affect the crontab.
 - The UI always fetches the latest backend diff and never shows stale or cached data.
 
+### API/Diff Note
+
+- The backend now matches jobs by unique ID for all diff operations, ensuring only true changes are shown in the review modal.
+
 ---
 
 ## 📊 Logging & Monitoring
@@ -459,6 +470,10 @@ Enable verbose logging by setting environment variable:
 export AIRCRON_DEBUG=1
 python main.py
 ```
+
+### If you see 'Unknown' jobs in the review modal, it means there are orphaned cron lines not mapped to any job in jobs.json. These will be cleaned up on apply.
+
+### If the UI ever seems out of sync, simply apply changes or reload—the system will always re-sync jobs.json and the crontab.
 
 ---
 
