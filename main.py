@@ -6,7 +6,6 @@ import shutil
 import threading
 import webbrowser
 from pathlib import Path
-from typing import Optional
 
 from app import create_app
 
@@ -15,14 +14,11 @@ def setup_logging() -> None:
     """Configure logging to rotate file in ~/Library/Logs/AirCron/."""
     log_dir = Path.home() / "Library" / "Logs" / "AirCron"
     log_dir.mkdir(parents=True, exist_ok=True)
-    
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_dir / "aircron.log"),
-            logging.StreamHandler()
-        ]
+        handlers=[logging.FileHandler(log_dir / "aircron.log"), logging.StreamHandler()],
     )
 
 
@@ -32,35 +28,35 @@ def check_dependencies() -> None:
     spotify_locations = [
         Path("/usr/local/bin/spotify"),
         Path("/opt/homebrew/bin/spotify"),
-        Path("/usr/bin/spotify")
+        Path("/usr/bin/spotify"),
     ]
-    
+
     spotify_found = False
     for spotify_path in spotify_locations:
         if spotify_path.is_file():
             spotify_found = True
             logging.info(f"Found spotify-cli at: {spotify_path}")
             break
-    
+
     if not spotify_found:
         # Also check if it's in PATH
-        if shutil.which('spotify') is not None:
+        if shutil.which("spotify") is not None:
             spotify_found = True
             logging.info(f"Found spotify-cli in PATH: {shutil.which('spotify')}")
-    
+
     if not spotify_found:
         raise RuntimeError(
             "Install spotify-cli - not found in /usr/local/bin/, /opt/homebrew/bin/, or PATH"
         )
-    
-    if shutil.which('crontab') is None:
-        raise RuntimeError('cron not found in PATH')
+
+    if shutil.which("crontab") is None:
+        raise RuntimeError("cron not found in PATH")
 
 
 def main() -> None:
     """Main entry point (no tray)."""
     setup_logging()
-    
+
     try:
         check_dependencies()
     except RuntimeError as e:
@@ -85,4 +81,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main() 
+    main()

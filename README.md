@@ -15,8 +15,8 @@ AirCron UI replaces manual script editing and `crontab -e` with an intuitive web
 
 ### ✨ Key Features
 
-- **🔊 Multi-Zone Audio Control** - Schedule actions for individual speakers, custom groups, or all speakers simultaneously
-- **🎵 Dual Volume Architecture** - Global Spotify volume control + individual Airfoil speaker volume management
+- **🔊 Multi-Zone Audio Control** - Schedule actions for individual speakers, custom groups, or all speakers simultaneously (Spotify and Apple Music supported)
+- **🎵 Dual Service & Volume Architecture** - Global Spotify or Apple Music volume control + individual Airfoil speaker volume management
 - **📅 Visual Schedule Management** - 24-hour grid view with color-coded actions and drag-and-drop simplicity
 - **🍃 Lightweight Tray App** - Runs silently in the menu bar, auto-launches browser interface
 - **⚡ Real-Time Speaker Discovery** - Automatic detection of available Airfoil speakers via AppleScript
@@ -33,28 +33,33 @@ flowchart TD
     B -->|Shell Commands| C[aircron_run.sh]
     B -->|Cron Management| D[System crontab]
     B -->|AppleScript| E[Airfoil.app]
-    C -->|CLI Commands| F[spotify-cli]
-    C -->|Speaker Volume| E
+    B -->|AppleScript| F[Music.app]
 
-    subgraph "Data Layer"
-        G[jobs.json<br/>~/Library/Application Support/AirCron/]
-        H[playlists.json<br/>~/Library/Application Support/AirCron/]
+    subgraph "Audio Control Layer"
+        C --> G[spotify-cli]
+        C --> E
+        C --> F
     end
 
-    B --> G
+    subgraph "Data Layer"
+        H[jobs.json<br/>~/Library/Application Support/AirCron/]
+        I[playlists.json<br/>~/Library/Application Support/AirCron/]
+    end
+
     B --> H
+    B --> I
 ```
 
 ### 🔧 Technology Stack
 
-| Component            | Technology          | Purpose                                              |
-| -------------------- | ------------------- | ---------------------------------------------------- |
-| **Tray Application** | Python 3.12 + rumps | Menu bar interface, browser launcher                 |
-| **Web Server**       | Flask + HTMX        | REST API + responsive UI                             |
-| **Audio Control**    | AppleScript + Bash  | Airfoil integration + Spotify CLI                    |
-| **Job Persistence**  | JSON Files          | Schedule storage in `~/Library/Application Support/` |
-| **Cron Management**  | Python subprocess   | Safe crontab manipulation with backups               |
-| **Frontend**         | Modular JavaScript  | Clean architecture across 5 focused modules          |
+| Component            | Technology          | Purpose                                                 |
+| -------------------- | ------------------- | ------------------------------------------------------- |
+| **Tray Application** | Python 3.12 + rumps | Menu bar interface, browser launcher                    |
+| **Web Server**       | Flask + HTMX        | REST API + responsive UI                                |
+| **Audio Control**    | AppleScript + Bash  | Airfoil integration + Spotify CLI + Apple Music control |
+| **Job Persistence**  | JSON Files          | Schedule storage in `~/Library/Application Support/`    |
+| **Cron Management**  | Python subprocess   | Safe crontab manipulation with backups                  |
+| **Frontend**         | Modular JavaScript  | Clean architecture across 5 focused modules             |
 
 ### 🏆 Recent Major Improvements
 
@@ -87,6 +92,19 @@ flowchart TD
 - **UI State Sync**: After applying cron changes, the UI always re-fetches all jobs and updates all views, so you never see stale or invisible jobs.
 - **Reliable Job Editing**: Editing a job always updates the correct job, even if you change speakers/zones in the modal. No more silent discards.
 - **Zone Refresh Robustness**: The UI always refreshes the correct zone and job list after any add/edit/apply, with fallback to reload if needed.
+
+**✅ 2025-07-09 - Granular Zone & Service Control**
+
+- **New `Connect` / `Disconnect` Actions**: Schedule speaker zone connections and disconnections independently of playback. You can now prepare a zone by setting its audio source (`Spotify` or `Apple Music`) and connecting speakers, then start playback later with a separate `play` job.
+- **Service-Aware Actions**: All actions (`play`, `pause`, `resume`, `volume`) are now explicitly tied to either Spotify or Apple Music, eliminating ambiguity and ensuring the correct application is controlled.
+- **Clarified UI**: The job creation modal now provides clear, contextual options and help text, distinguishing between playback commands and zone management.
+
+**✅ 2025-07-08 - Apple Music Support**
+
+- You can now add Apple Music playlists, schedule Apple Music jobs, and control Apple Music playback, volume, and zones.
+- Both Spotify and Apple Music jobs can be scheduled to different zones simultaneously.
+- Apple Music jobs use AppleScript and require the Music app to be installed and accessible via osascript.
+- UI and API support both services everywhere playlists or jobs are managed.
 
 ### 🆕 2025 Refactor: Service Modules & Bulletproof API
 
@@ -184,6 +202,14 @@ Centralized playlist library management:
 - **Smart Picker** - Dropdown selection in job creation (no more manual URI entry)
 - **CRUD Operations** - Full create, read, update, delete functionality
 
+### 🎵 Apple Music Playlists Tab
+
+Centralized Apple Music playlist library management:
+
+- **URI Storage** - Save frequently used Apple Music playlists
+- **Smart Picker** - Dropdown selection in job creation (no more manual URI entry)
+- **CRUD Operations** - Full create, read, update, delete functionality
+
 ---
 
 ## 🎛️ Audio Control Systems
@@ -208,12 +234,14 @@ AirCron implements sophisticated dual volume control:
 
 ### 🎵 Action Types
 
-| Action     | Description                        | Arguments                          |
-| ---------- | ---------------------------------- | ---------------------------------- |
-| **Play**   | Start playback of specific content | Spotify URI (playlist/album/track) |
-| **Pause**  | Stop current playback              | None                               |
-| **Resume** | Continue paused playback           | None                               |
-| **Volume** | Adjust speaker volume              | Percentage (0-100)                 |
+| Action         | Description                                                                                                                                           | Arguments                                | Service-Aware |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | :-----------: |
+| **Play**       | Starts playback of specific content. Ensures the target zone is connected to the selected service's audio transport before playing.                   | Spotify URI or Apple Music Playlist Name |      Yes      |
+| **Pause**      | Stops playback for the specified service.                                                                                                             | None                                     |      Yes      |
+| **Resume**     | Resumes playback for the specified service.                                                                                                           | None                                     |      Yes      |
+| **Volume**     | Adjusts volume for the specified service (global) or for a zone (per-speaker via Airfoil).                                                            | Percentage (0-100)                       |      Yes      |
+| **Connect**    | Prepares a zone for playback by connecting speakers to the specified service's audio transport (Airfoil for Spotify, native AirPlay for Apple Music). | None                                     |      Yes      |
+| **Disconnect** | Disconnects all speakers in the target zone from the specified service's audio transport.                                                             | None                                     |      Yes      |
 
 ---
 
@@ -263,7 +291,7 @@ POST /api/speakers/refresh        # Force speaker discovery
 
 ```http
 GET /api/jobs/<zone>             # Get jobs for zone
-POST /api/jobs/<zone>            # Create new job
+POST /api/jobs/<zone>            # Create new job (service: spotify or applemusic)
 PUT /api/jobs/<zone>/<id>        # Update existing job
 DELETE /api/jobs/<zone>/<id>     # Delete job
 GET /api/jobs/all                # Get all jobs (for schedule view)
@@ -281,8 +309,8 @@ GET /api/cron/jobs               # Get all currently applied jobs
 #### Playlist Management
 
 ```http
-GET /api/playlists               # Get all saved playlists
-POST /api/playlists              # Create new playlist
+GET /api/playlists               # Get all saved playlists (for both services)
+POST /api/playlists              # Create new playlist (service: spotify or applemusic)
 PUT /api/playlists/<id>          # Update playlist
 DELETE /api/playlists/<id>       # Delete playlist
 ```
@@ -296,10 +324,13 @@ DELETE /api/playlists/<id>       # Delete playlist
   "label": "Morning Jazz",
   "days": [1, 2, 3, 4, 5], // 1=Monday, 7=Sunday
   "time": "07:30",
-  "action": "play", // "play" | "pause" | "resume" | "volume"
+  "action": "play", // "play" | "pause" | "resume" | "volume" | "connect" | "disconnect"
+  "service": "spotify" | "applemusic",
   "args": {
-    "uri": "spotify:playlist:...", // for play action
-    "volume": 75 // for volume action
+    // For "play" (Spotify): { "uri": "spotify:playlist:..." }
+    // For "play" (Apple Music): { "playlist": "Chill Mix" }
+    // For "volume": { "volume": 75 }
+    // Other actions have empty args.
   }
 }
 ```
@@ -310,36 +341,35 @@ DELETE /api/playlists/<id>       # Delete playlist
 
 ### Sandboxed Block Format
 
-AirCron uses isolated cron sections for safe management:
+AirCron uses isolated cron sections for safe management. The `aircron_run.sh` script is the entry point for all scheduled jobs, dispatching actions based on the provided arguments.
+
+**Cron Job Structure:**
+`MM HH * * D /path/to/aircron_run.sh 'SPEAKER_ZONE' 'ACTION' 'ARG1' 'ARG2' 'SERVICE'`
+
+**Example `crontab` Block:**
 
 ```bash
 # BEGIN AirCron (auto-generated; do not edit between markers)
 
-# Kitchen – Morning Jazz 07:30
-30 7 * * 1-5 /path/to/aircron_run.sh "Kitchen" play "spotify:playlist:..."
+# --- Office Zone ---
 
-# All Speakers – Global Volume 09:30
-30 9 * * 1-5 /path/to/aircron_run.sh "All Speakers" volume 75
+# Connect Office Zone to Apple Music at 8:55 AM on weekdays
+55 8 * * 1-5 /path/to/aircron_run.sh 'Office Zone' 'connect' '' '' 'applemusic'
+
+# Play "Focus" playlist in Office Zone at 9:00 AM on weekdays
+0 9 * * 1-5 /path/to/aircron_run.sh 'Office Zone' 'play' 'Focus Playlist' '' 'applemusic'
+
+
+# --- Kitchen Zone (Custom Group) ---
+
+# Connect Kitchen and Living Room to Spotify at 6:00 PM on weekends
+0 18 * * 6,7 /path/to/aircron_run.sh 'Custom:Kitchen,Living Room' 'connect' '' '' 'spotify'
+
+# Play "Dinner Jazz" playlist in the custom zone at 6:05 PM on weekends
+5 18 * * 6,7 /path/to/aircron_run.sh 'Custom:Kitchen,Living Room' 'play' 'spotify:playlist:...' '' 'spotify'
 
 # END AirCron
 ```
-
-### Safety Features
-
-- **🛡️ Isolated Sections** - Only content between markers is managed
-- **📄 Automatic Backups** - Crontab backed up to `~/aircron_backup_YYYY-MM-DDTHHMMSS.txt`
-- **✅ Validation** - Comprehensive cron syntax validation before application
-- **🔄 Recovery** - Manual recovery possible from backup files if needed
-
-### 🛡️ Cron Review Robustness
-
-- The review modal only shows changes if the set of cron lines in jobs.json and the crontab differ, regardless of job IDs or field swaps.
-- The backend diff logic is robust: it never shows phantom changes—only actionable changes that would actually affect the crontab.
-- The UI always fetches the latest backend diff and never shows stale or cached data.
-
-### API/Diff Note
-
-- The backend now matches jobs by unique ID for all diff operations, ensuring only true changes are shown in the review modal.
 
 ---
 

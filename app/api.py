@@ -1,18 +1,13 @@
 """AirCron API endpoints."""
 
 import logging
-from typing import Any, Dict, List
-import json
-from datetime import datetime
+from typing import Any
 
-from flask import Blueprint, jsonify, request, current_app
-from werkzeug.exceptions import BadRequest
+from flask import Blueprint, jsonify, request
 
-from . import cronblock
-from .jobs_store import Job, JobsStore
+from .jobs_store import JobsStore
+from .services import cron_service, jobs_service, playlists_service, speakers_service
 from .speakers import speaker_discovery
-from .services import jobs_service, cron_service, speakers_service, playlists_service
-from .cronblock import _normalize_cron_line
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +49,7 @@ def get_jobs_for_zone(zone: str) -> Any:
 
 @api_bp.route("/jobs/<zone>", methods=["POST"])
 def create_job(zone: str) -> Any:
-    """Create a new job for the specified zone."""
+    """Create a new job in the specified zone."""
     logger.info(f"[API] POST /jobs/{zone} - incoming request")
     try:
         data = request.get_json()
@@ -62,48 +57,64 @@ def create_job(zone: str) -> Any:
         if not data:
             logger.warning(f"[API] POST /jobs/{zone} - No JSON data provided")
             return jsonify({"error": "No JSON data provided"}), 400
-        job = jobs_service.create_job(zone, data)
-        logger.info(f"[API] POST /jobs/{zone} - Created job {job['id']} for zone {zone}")
+
+        # For POST requests, use the zone from URL as authoritative
+        # Allow zone in body to override URL zone if provided
+        target_zone = data.get("zone", zone)
+
+        job = jobs_service.create_job(target_zone, data)
+        logger.info(f"[API] POST /jobs/{zone} - Created job {job['id']} for zone {target_zone}")
         return jsonify(job), 201
     except ValueError as e:
         msg = str(e)
         if (
-            'Invalid time format' in msg or 'Invalid time range' in msg or
-            'Missing required field' in msg or
-            'Days must be integers' in msg or 'Days must be a non-empty list' in msg or
-            'Invalid action' in msg
+            "Invalid time format" in msg
+            or "Invalid time range" in msg
+            or "Missing required field" in msg
+            or "Days must be integers" in msg
+            or "Days must be a non-empty list" in msg
+            or "Invalid action" in msg
+            or "Invalid service" in msg
+            or "requires" in msg
         ):
             logger.warning(f"[API] POST /jobs/{zone} - BadRequest: {e}")
             return jsonify({"error": msg}), 400
-        logger.warning(f"[API] POST /jobs/{zone} - ValueError: {e}")
+        logger.warning(f"[API] POST /jobs/{zone} - Conflict: {e}")
         return jsonify({"error": msg}), 409
     except Exception as e:
         logger.error(f"[API] POST /jobs/{zone} - Exception: {e}", exc_info=True)
         return jsonify({"error": "Failed to create job"}), 500
 
 
-@api_bp.route("/jobs/<zone>/<job_id>", methods=["PUT"])
-def update_job(zone: str, job_id: str) -> Any:
+@api_bp.route("/jobs/<original_zone>/<job_id>", methods=["PUT"])
+def update_job(original_zone: str, job_id: str) -> Any:
     """Update an existing job."""
-    logger.info(f"[API] PUT /jobs/{zone}/{job_id} - incoming request")
+    logger.info(f"[API] PUT /jobs/{original_zone}/{job_id} - incoming request")
     try:
         data = request.get_json()
-        logger.info(f"[API] PUT /jobs/{zone}/{job_id} - data: {data}")
+        logger.info(f"[API] PUT /jobs/{original_zone}/{job_id} - data: {data}")
         if not data:
-            logger.warning(f"[API] PUT /jobs/{zone}/{job_id} - No JSON data provided")
             return jsonify({"error": "No JSON data provided"}), 400
-        job = jobs_service.update_job(zone, job_id, data)
-        logger.info(f"[API] PUT /jobs/{zone}/{job_id} - Updated job {job_id} in zone {zone}")
+
+        # Pass the original_zone to find the job, and the new data for the update.
+        job = jobs_service.update_job(original_zone, job_id, data)
+
+        # The service layer will have handled the zone change, so log the outcome.
+        new_zone = data.get("zone", original_zone)
+        logger.info(
+            f"[API] PUT /jobs/ - Updated job {job_id}. "
+            f"Original zone: {original_zone}, New zone: {new_zone}"
+        )
         return jsonify(job)
     except ValueError as e:
         msg = str(e)
-        if 'Job not found' in msg:
-            logger.warning(f"[API] PUT /jobs/{zone}/{job_id} - NotFound: {e}")
+        if "Job not found" in msg:
+            logger.warning(f"[API] PUT /jobs/{original_zone}/{job_id} - NotFound: {e}")
             return jsonify({"error": msg}), 404
-        logger.warning(f"[API] PUT /jobs/{zone}/{job_id} - ValueError: {e}")
+        logger.warning(f"[API] PUT /jobs/{original_zone}/{job_id} - ValueError: {e}")
         return jsonify({"error": msg}), 409
     except Exception as e:
-        logger.error(f"[API] PUT /jobs/{zone}/{job_id} - Exception: {e}", exc_info=True)
+        logger.error(f"[API] PUT /jobs/{original_zone}/{job_id} - Exception: {e}", exc_info=True)
         return jsonify({"error": "Failed to update job"}), 500
 
 
@@ -139,17 +150,20 @@ def get_status() -> Any:
     try:
         airfoil_running = speaker_discovery.is_airfoil_running()
         from flask import current_app
+
         app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
         jobs_store = JobsStore(app_support_dir)
         all_jobs = jobs_store.get_all_jobs()
         total_jobs = sum(len(jobs) for jobs in all_jobs.values())
-        
-        return jsonify({
-            "airfoil_running": airfoil_running,
-            "total_jobs": total_jobs,
-            "zones": list(all_jobs.keys())
-        })
-        
+
+        return jsonify(
+            {
+                "airfoil_running": airfoil_running,
+                "total_jobs": total_jobs,
+                "zones": list(all_jobs.keys()),
+            }
+        )
+
     except Exception as e:
         logger.error(f"Error getting status: {e}")
         return jsonify({"error": "Failed to get status"}), 500
@@ -166,7 +180,7 @@ def get_cron_status() -> Any:
         return jsonify({"error": "Failed to get cron status"}), 500
 
 
-def _get_json_response(resp):
+def _get_json_response(resp: Any) -> Any:
     """Helper to always get the JSON from a Flask response, even if it's a (resp, status) tuple."""
     if isinstance(resp, tuple):
         return resp[0].get_json()
@@ -216,11 +230,24 @@ def get_playlists() -> Any:
 @api_bp.route("/playlists", methods=["POST"])
 def create_playlist() -> Any:
     try:
-        data = request.get_json()
+        if request.is_json:
+            data = request.get_json()
+        else:
+            data = request.form.to_dict()
         if not data:
             return jsonify({"error": "No data provided"}), 400
-        result = playlists_service.create_playlist(data)
-        return jsonify(result), 201
+        try:
+            playlists_service.create_playlist(data)
+        except ValueError as ve:
+            return jsonify({"error": str(ve)}), 409
+        # Return a script to close the modal and reload playlists
+        script = (
+            "<script>window.AirCron.closeModal(); "
+            "if (typeof loadPlaylistsContent === 'function') { loadPlaylistsContent(); } "
+            "if (window.AirCron && window.AirCron.showNotification) { "
+            "window.AirCron.showNotification('Playlist created', 'success'); }</script>"
+        )
+        return script, 201, {"Content-Type": "text/html"}
     except Exception as e:
         logger.error(f"Error creating playlist: {e}")
         return jsonify({"error": "Failed to create playlist"}), 500
@@ -242,7 +269,7 @@ def update_playlist(playlist_id: str) -> Any:
 @api_bp.route("/playlists/<playlist_id>", methods=["DELETE"])
 def delete_playlist(playlist_id: str) -> Any:
     try:
-        result = playlists_service.delete_playlist(playlist_id)
+        playlists_service.delete_playlist(playlist_id)
         return "", 204
     except Exception as e:
         logger.error(f"Error deleting playlist: {e}")
@@ -257,4 +284,4 @@ def get_all_jobs_flat() -> Any:
         return jsonify({"jobs": jobs_flat})
     except Exception as e:
         logger.error(f"Error getting all jobs flat: {e}")
-        return jsonify({"error": "Failed to get jobs"}), 500 
+        return jsonify({"error": "Failed to get jobs"}), 500

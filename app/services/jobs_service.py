@@ -1,11 +1,13 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
+
 from flask import current_app
-from ..jobs_store import Job, JobsStore
+
 from .. import cronblock
-from werkzeug.exceptions import BadRequest
+from ..jobs_store import Job, JobsStore
 
 logger = logging.getLogger(__name__)
+
 
 def get_jobs_for_zone(zone: str) -> List[Dict[str, Any]]:
     app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
@@ -13,7 +15,8 @@ def get_jobs_for_zone(zone: str) -> List[Dict[str, Any]]:
     jobs = jobs_store.get_jobs_for_zone(zone)
     return [job.to_dict() for job in jobs]
 
-def create_job(zone: str, data: dict) -> Dict[str, Any]:
+
+def create_job(zone: str, data: Dict[str, Any]) -> Dict[str, Any]:
     required_fields = ["days", "time", "action"]
     for field in required_fields:
         if field not in data:
@@ -34,14 +37,32 @@ def create_job(zone: str, data: dict) -> Dict[str, Any]:
         if not isinstance(day, int) or day < 1 or day > 7:
             raise ValueError("Days must be integers 1-7 (1=Monday, 7=Sunday)")
     action = data["action"]
-    valid_actions = ["play", "pause", "resume", "volume"]
+    valid_actions = ["play", "pause", "resume", "volume", "connect", "disconnect"]
     if action not in valid_actions:
         raise ValueError(f"Invalid action. Must be one of: {valid_actions}")
     args = data.get("args", {})
-    if action == "play" and "uri" not in args:
-        raise ValueError("Play action requires 'uri' in args")
+    service = data.get("service", "spotify")
+
+    valid_services = ["spotify", "applemusic"]
+    if service not in valid_services:
+        raise ValueError(f"Invalid service. Must be one of: {valid_services}")
+
+    # Additional validation for empty service
+    if not service or service.strip() == "":
+        raise ValueError("Service cannot be empty")
+
+    if action == "play":
+        if service == "spotify":
+            if "uri" not in args or not args["uri"]:
+                raise ValueError("Play action for Spotify requires 'uri' in args")
+        elif service == "applemusic":
+            if "playlist" not in args or not args["playlist"]:
+                raise ValueError("Play action for Apple Music requires 'playlist' in args")
     elif action == "volume" and "volume" not in args:
         raise ValueError("Volume action requires 'volume' in args")
+    elif action in ["connect", "disconnect"]:
+        if not service or service.strip() == "":
+            raise ValueError(f"{action.title()} action requires a valid 'service' to be specified")
     if cronblock.cron_manager is None:
         app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
         cronblock.cron_manager = cronblock.CronManager(app_support_dir)
@@ -57,13 +78,15 @@ def create_job(zone: str, data: dict) -> Dict[str, Any]:
         time=time_str,
         action=action,
         args=args,
-        label=data.get("label", "")
+        label=data.get("label", ""),
+        service=service,
     )
     jobs_store.add_job(job)
     logger.info(f"[jobs_service] Created job {job_id} for zone {zone}")
     return job.to_dict()
 
-def update_job(zone: str, job_id: str, data: dict) -> Dict[str, Any]:
+
+def update_job(zone: str, job_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
     app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
     jobs_store = JobsStore(app_support_dir)
     existing_jobs = jobs_store.get_jobs_for_zone(zone)
@@ -97,16 +120,42 @@ def update_job(zone: str, job_id: str, data: dict) -> Dict[str, Any]:
     args = data.get("args", existing_job.args)
     label = data.get("label", getattr(existing_job, "label", ""))
     time_val = data.get("time", existing_job.time)
-    # Determine new zone (may be different from old zone)
-    new_zone = data.get("zone", zone)
+    service = data.get("service", getattr(existing_job, "service", "spotify"))
+
+    valid_services = ["spotify", "applemusic"]
+    if service not in valid_services:
+        raise ValueError(f"Invalid service. Must be one of: {valid_services}")
+
+    # Additional validation for empty service
+    if not service or service.strip() == "":
+        raise ValueError("Service cannot be empty")
+
+    valid_actions = ["play", "pause", "resume", "volume", "connect", "disconnect"]
+    if action not in valid_actions:
+        raise ValueError(f"Invalid action. Must be one of: {valid_actions}")
+
+    if action == "play":
+        if service == "spotify":
+            if "uri" not in args or not args["uri"]:
+                raise ValueError("Play action for Spotify requires 'uri' in args")
+        elif service == "applemusic":
+            if "playlist" not in args or not args["playlist"]:
+                raise ValueError("Play action for Apple Music requires 'playlist' in args")
+    elif action == "volume" and "volume" not in args:
+        raise ValueError("Volume action requires 'volume' in args")
+    elif action in ["connect", "disconnect"]:
+        if not service or service.strip() == "":
+            raise ValueError(f"{action.title()} action requires a valid 'service' to be specified")
+
     updated_job = Job(
         job_id=job_id,
-        zone=new_zone,
+        zone=data.get("zone", zone),
         days=days,
         time=time_val,
         action=action,
         args=args,
-        label=label
+        label=label,
+        service=service,
     )
     if cronblock.cron_manager is None:
         app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
@@ -114,6 +163,7 @@ def update_job(zone: str, job_id: str, data: dict) -> Dict[str, Any]:
     if not cronblock.cron_manager.validate_cron_syntax(updated_job.time, updated_job.days):
         raise ValueError("Invalid cron syntax")
     # If zone changed, remove from old zone and add to new zone
+    new_zone = data.get("zone", zone)
     if new_zone != zone:
         jobs_store.delete_job(zone, job_id)
         jobs_store.add_job(updated_job)
@@ -123,11 +173,13 @@ def update_job(zone: str, job_id: str, data: dict) -> Dict[str, Any]:
         logger.info(f"[jobs_service] Updated job {job_id} in zone {zone}")
     return updated_job.to_dict()
 
+
 def delete_job(zone: str, job_id: str) -> None:
     app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
     jobs_store = JobsStore(app_support_dir)
     jobs_store.delete_job(zone, job_id)
     logger.info(f"[jobs_service] Deleted job {job_id} from zone {zone}")
+
 
 def get_all_jobs_flat() -> List[Dict[str, Any]]:
     app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
@@ -139,4 +191,4 @@ def get_all_jobs_flat() -> List[Dict[str, Any]]:
             job_dict = job.to_dict()
             job_dict["zone"] = zone
             jobs_flat.append(job_dict)
-    return jobs_flat 
+    return jobs_flat

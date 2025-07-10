@@ -1,0 +1,377 @@
+#!/usr/bin/env bash
+
+# DEBUG: Log all received arguments and SERVICE variable
+LOG_FILE=~/Library/Logs/AirCron/cron.log
+mkdir -p "$(dirname "$LOG_FILE")"
+echo "$(date): DEBUG: Args: $1 $2 $3 $4 $5" >> "$LOG_FILE"
+echo "$(date): DEBUG: SERVICE='$5'" >> "$LOG_FILE"
+
+# AirCron shell wrapper script
+# Called by cron jobs to execute actions on specific speaker zones
+
+SPEAKER="$1"
+ACTION="$2"
+ARG1="$3"
+ARG2="$4"
+# The SERVICE variable is crucial for distinguishing between Spotify and Apple Music.
+# For backward compatibility, an empty service argument defaults to Spotify.
+SERVICE="$5"
+shift 5  # Remove first five arguments
+
+# Find spotify-cli in common locations
+SPOTIFY_CMD=""
+if [ -x "/usr/local/bin/spotify" ]; then
+    SPOTIFY_CMD="/usr/local/bin/spotify"
+elif [ -x "/opt/homebrew/bin/spotify" ]; then
+    SPOTIFY_CMD="/opt/homebrew/bin/spotify"
+elif [ -x "/usr/bin/spotify" ]; then
+    SPOTIFY_CMD="/usr/bin/spotify"
+elif command -v spotify >/dev/null 2>&1; then
+    SPOTIFY_CMD="spotify"
+fi
+
+# Log all actions
+echo "$(date): AirCron dispatching ACTION='$ACTION' for SPEAKER='$SPEAKER' to SERVICE='$SERVICE' with ARGS: $ARG1 $ARG2" >> "$LOG_FILE"
+
+# --- Helper Functions ---
+
+# Wrapper to run and log osascript commands
+run_osascript() {
+    local script="$1"
+    echo "$(date): Running osascript: $script" >> "$LOG_FILE"
+    # FIX: Pipe multi-line scripts to osascript instead of using -e to avoid syntax errors.
+    output=$(echo "$script" | osascript 2>&1)
+    exit_code=$?
+    echo "$(date): osascript output: $output" >> "$LOG_FILE"
+    if [ $exit_code -ne 0 ]; then
+        echo "$(date): ERROR: osascript failed with exit code $exit_code" >> "$LOG_FILE"
+    fi
+    return $exit_code
+}
+
+# Connects a zone of speakers using the correct transport (Airfoil or Apple Music's AirPlay).
+# Usage: connect_speakers "ZoneName" "spotify|applemusic"
+connect_speakers() {
+    local target_zone="$1"
+    local transport_service="$2"
+    
+    echo "$(date): Connecting speakers for zone '$target_zone' using service '$transport_service'" >> "$LOG_FILE"
+
+    if [ "$transport_service" = "applemusic" ]; then
+        # --- Apple Music (Native AirPlay) ---
+        # This logic is now branched to handle all cases correctly.
+        echo "$(date): Using Apple Music native AirPlay for connection" >> "$LOG_FILE"
+        if [[ "$target_zone" == "All Speakers" ]]; then
+            # Connect all available AirPlay devices.
+            local script="tell application \"Music\" to set current AirPlay devices to (every AirPlay device)"
+            run_osascript "$script"
+        elif [[ "$target_zone" == Custom:* ]]; then
+            # FIX: Connect a custom list of speakers with a more robust AppleScript command.
+            # The previous filter-based method (`whose name is in...`) proved unreliable on some systems,
+            # causing error -10014. This new method explicitly builds a list of device *references*.
+            local custom_speakers=$(echo "$target_zone" | sed 's/Custom://')
+            local speaker_list_for_as="\"${custom_speakers//,/\",\"}\"" # Converts "A,B" to "\"A\",\"B\""
+
+            local script="tell application \"Music\"
+                set targetSpeakerNames to {$speaker_list_for_as}
+                set devicesToConnect to {}
+                try
+                    repeat with aDevice in (get every AirPlay device)
+                        if name of aDevice is in targetSpeakerNames then
+                            set end of devicesToConnect to aDevice
+                        end if
+                    end repeat
+                    if (count of devicesToConnect) > 0 then
+                        set current AirPlay devices to devicesToConnect
+                    end if
+                on error err_msg number err_num
+                    log \"AirCron AppleScript Error: Could not connect custom speaker group. \" & err_msg
+                end try
+            end tell"
+            run_osascript "$script"
+        else
+            # FIX: Connect a single, specific speaker.
+            # We must refer to 'the first' device whose name matches to get a single object,
+            # which resolves the "Handler only handles single objects. (-10014)" error.
+            local script="tell application \"Music\"
+                try
+                    set current AirPlay devices to (the first AirPlay device whose name is \"$target_zone\")
+                on error err_msg number err_num
+                    log \"AirCron AppleScript Error: Could not connect single speaker '$target_zone'. \" & err_msg
+                end try
+            end tell"
+            run_osascript "$script"
+        fi
+    else
+        # --- Spotify (via Airfoil) ---
+        run_osascript "tell application \"Airfoil\" to set current audio source to application \"Spotify\""
+        if [ "$target_zone" = "All Speakers" ]; then
+            run_osascript 'tell application "Airfoil" to connect (every speaker)'
+        elif [[ "$target_zone" == Custom:* ]]; then
+            local custom_speakers=$(echo "$target_zone" | sed 's/Custom://')
+            echo "$custom_speakers" | tr ',' '\n' | while IFS= read -r speaker; do
+                speaker=$(echo "$speaker" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+                [ -n "$speaker" ] && run_osascript "tell application \"Airfoil\" to connect (every speaker whose name is \"$speaker\")"
+            done
+        else
+            run_osascript "tell application \"Airfoil\" to connect (every speaker whose name is \"$target_zone\")"
+        fi
+    fi
+}
+
+# Disconnects a zone of speakers using the correct transport.
+# Usage: disconnect_speakers "ZoneName" "spotify|applemusic"
+disconnect_speakers() {
+    local target_zone="$1"
+    local transport_service="$2"
+    echo "$(date): Disconnecting speakers for zone '$target_zone' using service '$transport_service'" >> "$LOG_FILE"
+
+    if [ "$transport_service" = "applemusic" ]; then
+        # --- Apple Music (Native AirPlay) - Disconnect ---
+        # This logic now mirrors the connect_speakers function to correctly handle targeted disconnections.
+        echo "$(date): Using Apple Music native AirPlay for disconnection" >> "$LOG_FILE"
+        if [ "$target_zone" = "All Speakers" ]; then
+            # Disconnecting all is simple.
+            run_osascript 'tell application "Music" to set current AirPlay devices to {}'
+        elif [[ "$target_zone" == Custom:* ]]; then
+            # FIX: Disconnect a custom group using a more robust approach.
+            # First get current devices, then explicitly filter out the ones to disconnect.
+            local custom_speakers=$(echo "$target_zone" | sed 's/Custom://')
+            local speaker_list_for_as="\"${custom_speakers//,/\",\"}\"" # Converts "A,B" to "\"A\",\"B\""
+            echo "$(date): DEBUG: target_zone='$target_zone' custom_speakers='$custom_speakers' speaker_list_for_as='$speaker_list_for_as'" >> "$LOG_FILE"
+
+            local script="on listToString(lst)
+                set AppleScript's text item delimiters to \", \"
+                set result to lst as string
+                set AppleScript's text item delimiters to \"\"
+                return result
+            end listToString
+            
+            tell application \"Music\"
+                set speakersToDisconnect to {$speaker_list_for_as}
+                set devicesToKeep to {}
+                set currentDeviceNames to {}
+                try
+                    set currentDevices to (get current AirPlay devices)
+                    repeat with aDevice in currentDevices
+                        set end of currentDeviceNames to name of aDevice
+                        if name of aDevice is not in speakersToDisconnect then
+                            set end of devicesToKeep to aDevice
+                        end if
+                    end repeat
+                    log \"AirCron Debug: Current device count: \" & (count of currentDeviceNames)
+                    log \"AirCron Debug: Speakers to disconnect count: \" & (count of speakersToDisconnect)
+                    set current AirPlay devices to devicesToKeep
+                    set finalDeviceNames to {}
+                    repeat with aDevice in (get current AirPlay devices)
+                        set end of finalDeviceNames to name of aDevice
+                    end repeat
+                    log \"AirCron Debug: Final device count after disconnect: \" & (count of finalDeviceNames)
+                on error err_msg number err_num
+                    log \"AirCron AppleScript Error: Could not disconnect custom speaker group. \" & err_msg & \" (Code: \" & err_num & \")\"
+                end try
+            end tell"
+            run_osascript "$script"
+        else
+            # FIX: Disconnect a single speaker using the robust approach that mirrors connect_speakers.
+            # Filter out the target speaker from current devices to avoid -10014 errors.
+            local script="on listToString(lst)
+                set AppleScript's text item delimiters to \", \"
+                set result to lst as string
+                set AppleScript's text item delimiters to \"\"
+                return result
+            end listToString
+            
+            tell application \"Music\"
+                set speakerToDisconnect to \"$target_zone\"
+                set devicesToKeep to {}
+                set currentDeviceNames to {}
+                try
+                    set currentDevices to (get current AirPlay devices)
+                    repeat with aDevice in currentDevices
+                        set end of currentDeviceNames to name of aDevice
+                        if name of aDevice is not speakerToDisconnect then
+                            set end of devicesToKeep to aDevice
+                        end if
+                    end repeat
+                    log \"AirCron Debug: Current device count: \" & (count of currentDeviceNames)
+                    log \"AirCron Debug: Speaker to disconnect: \" & speakerToDisconnect
+                    set current AirPlay devices to devicesToKeep
+                    set finalDeviceNames to {}
+                    repeat with aDevice in (get current AirPlay devices)
+                        set end of finalDeviceNames to name of aDevice
+                    end repeat
+                    log \"AirCron Debug: Final device count after disconnect: \" & (count of finalDeviceNames)
+                on error err_msg number err_num
+                    log \"AirCron AppleScript Error: Could not disconnect single speaker '$target_zone'. \" & err_msg & \" (Code: \" & err_num & \")\"
+                end try
+            end tell"
+            run_osascript "$script"
+        fi
+    else
+        # --- Spotify (via Airfoil) - Disconnect ---
+        # For Airfoil, we use its disconnect command, now with added robustness.
+        # We only attempt to disconnect speakers that are actually connected.
+        if [ "$target_zone" = "All Speakers" ]; then
+            run_osascript 'tell application "Airfoil" to disconnect (every speaker whose connected is true)'
+        elif [[ "$target_zone" == Custom:* ]]; then
+            local custom_speakers=$(echo "$target_zone" | sed 's/Custom://')
+            echo "$custom_speakers" | tr ',' '\n' | while IFS= read -r speaker; do
+                speaker=$(echo "$speaker" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+                if [ -n "$speaker" ]; then
+                    local script="tell application \"Airfoil\"
+                        try
+                            set s to the first speaker whose name is \"$speaker\"
+                            if connected of s is true then
+                                disconnect s
+                            end if
+                        on error err_msg
+                            log \"AirCron AppleScript Error: Failed to disconnect speaker '$speaker'. \" & err_msg
+                        end try
+                    end tell"
+                    run_osascript "$script"
+                fi
+            done
+        else
+            local script="tell application \"Airfoil\"
+                try
+                    set s to the first speaker whose name is \"$target_zone\"
+                    if connected of s is true then
+                        disconnect s
+                    end if
+                on error err_msg
+                    log \"AirCron AppleScript Error: Failed to disconnect speaker '$target_zone'. \" & err_msg
+                end try
+            end tell"
+            run_osascript "$script"
+        fi
+    fi
+}
+
+# Check if Apple Music is running and accessible
+# Usage: check_apple_music_running
+check_apple_music_running() {
+    local script="tell application \"System Events\"
+        return (name of processes) contains \"Music\"
+    end tell"
+    
+    local result=$(echo "$script" | osascript 2>&1)
+    if [[ "$result" == "true" ]]; then
+        echo "$(date): Apple Music app is running" >> "$LOG_FILE"
+        return 0
+    else
+        echo "$(date): WARNING: Apple Music app is not running" >> "$LOG_FILE"
+        return 1
+    fi
+}
+
+# Sets the current audio source application in Airfoil.
+# Usage: set_airfoil_source "spotify|applemusic"
+set_airfoil_source() {
+    local target_service="$1"
+    local source_app=""
+    if [ "$target_service" = "applemusic" ]; then
+        source_app="Music"
+    elif [ "$target_service" = "spotify" ]; then
+        source_app="Spotify"
+    else
+        echo "$(date): ERROR - Cannot set Airfoil source, unknown service '$target_service'" >> "$LOG_FILE"
+        return
+    fi
+    echo "$(date): Setting Airfoil audio source to '$source_app'" >> "$LOG_FILE"
+    run_osascript "tell application \"Airfoil\" to set current audio source to application \"$source_app\""
+}
+
+# --- Main Action Dispatcher ---
+
+case "$ACTION" in
+    play)
+        # First, ensure the zone is connected to the correct service's transport
+        connect_speakers "$SPEAKER" "$SERVICE"
+
+        # Then, start playback
+        if [ "$SERVICE" = "applemusic" ]; then
+            echo "$(date): Playing Apple Music playlist '$ARG1'" >> "$LOG_FILE"
+            if check_apple_music_running; then
+                osascript -e 'tell application "Music" to play playlist "'"$ARG1"'"'
+            else
+                echo "$(date): ERROR: Cannot play Apple Music playlist, Music app is not running" >> "$LOG_FILE"
+                exit 1
+            fi
+        else # Default to Spotify
+            if [ -z "$SPOTIFY_CMD" ]; then
+                echo "$(date): ERROR - spotify-cli not found, cannot execute Spotify action" >> "$LOG_FILE"; exit 1;
+            fi
+            echo "$(date): Playing Spotify URI '$ARG1'" >> "$LOG_FILE"
+            "$SPOTIFY_CMD" play uri "$ARG1"
+        fi
+        ;;
+
+    pause)
+        if [ "$SERVICE" = "applemusic" ]; then
+            osascript -e 'tell application "Music" to pause'
+        else
+            [ -n "$SPOTIFY_CMD" ] && "$SPOTIFY_CMD" pause
+        fi
+        ;;
+
+    resume)
+        if [ "$SERVICE" = "applemusic" ]; then
+            osascript -e 'tell application "Music" to play'
+        else
+            [ -n "$SPOTIFY_CMD" ] && "$SPOTIFY_CMD" play
+        fi
+        ;;
+
+    volume)
+        # Volume control is always specific to the application or Airfoil's speakers, not the transport method.
+        if [ "$SPEAKER" = "All Speakers" ]; then
+            echo "$(date): Setting global application volume for SERVICE='$SERVICE' to '$ARG1%'" >> "$LOG_FILE"
+            if [ "$SERVICE" = "applemusic" ]; then
+                osascript -e 'tell application "Music" to set sound volume to '"$ARG1"''
+            else
+                [ -n "$SPOTIFY_CMD" ] && "$SPOTIFY_CMD" vol "$ARG1"
+            fi
+        else
+            # Per-speaker volume MUST use Airfoil. If using Apple Music direct, this will have no effect unless Airfoil is also capturing it.
+            # This is a designed limitation: fine-grained volume requires the Airfoil transport.
+            echo "$(date): Setting Airfoil per-speaker volume for ZONE='$SPEAKER' to '$ARG1%'" >> "$LOG_FILE"
+            AIRFOIL_VOLUME=$(echo "scale=2; $ARG1 / 100" | bc -l)
+            speaker_list="$SPEAKER"
+            if [[ "$SPEAKER" == Custom:* ]]; then
+                speaker_list=$(echo "$SPEAKER" | sed 's/Custom://' | tr ',' '\n')
+            fi
+            echo "$speaker_list" | while IFS= read -r speaker_name; do
+                speaker_name=$(echo "$speaker_name" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+                if [ -n "$speaker_name" ]; then
+                    # FIX: Use run_osascript for robust, multi-line execution.
+                    script="tell application \"Airfoil\"
+                        try
+                            set s to the first speaker whose name is \"$speaker_name\"
+                            set volume of s to $AIRFOIL_VOLUME
+                        on error err_msg
+                            log \"AirCron AppleScript Error: Could not set volume for '$speaker_name'. \" & err_msg
+                        end try
+                    end tell"
+                    run_osascript "$script"
+                fi
+            done
+        fi
+        ;;
+
+    connect)
+        connect_speakers "$SPEAKER" "$SERVICE"
+        ;;
+
+    disconnect)
+        # Disconnect is now service-aware to handle both transports
+        disconnect_speakers "$SPEAKER" "$SERVICE"
+        ;;
+
+    *)
+        echo "$(date): ERROR - Unknown action received: '$ACTION'" >> "$LOG_FILE"
+        exit 1
+        ;;
+esac
+
+echo "$(date): AirCron action '$ACTION' completed successfully" >> "$LOG_FILE" 

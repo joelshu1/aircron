@@ -88,37 +88,58 @@
                         required
                         class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="">Select action...</option>
-                    <option value="play" {% if action == 'edit' and job.action == 'play' %}selected{% endif %}>Play Playlist</option>
-                    <option value="resume" {% if action == 'edit' and job.action == 'resume' %}selected{% endif %}>Resume Last</option>
-                    <option value="pause" {% if action == 'edit' and job.action == 'pause' %}selected{% endif %}>Pause</option>
+                    <option value="play" {% if action == 'edit' and job.action == 'play' %}selected{% endif %}>Play (Playlist/Track)</option>
                     <option value="volume" {% if action == 'edit' and job.action == 'volume' %}selected{% endif %}>Set Volume</option>
+                    <option value="pause" {% if action == 'edit' and job.action == 'pause' %}selected{% endif %}>Pause Playback</option>
+                    <option value="resume" {% if action == 'edit' and job.action == 'resume' %}selected{% endif %}>Resume Playback</option>
+                    <option disabled>──────────</option>
+                    <option value="connect" {% if action == 'edit' and job.action == 'connect' %}selected{% endif %}>Connect Zone to Service</option>
+                    <option value="disconnect" {% if action == 'edit' and job.action == 'disconnect' %}selected{% endif %}>Disconnect Zone</option>
                 </select>
             </div>
             
-            <!-- Playlist URI (for play action) -->
-            <div id="uri-field" class="mb-4" 
-                 data-show-for="play"
-                 {% if not (action == 'edit' and job.action == 'play') %}style="display: none"{% endif %}>
-                
+            <!-- Audio Transport / Service Selector -->
+            <div class="mb-4" id="service-field" hidden>
+                <label id="service-label" class="block text-sm font-medium text-gray-700 mb-1">Audio Transport</label>
+                <select name="service" id="job-service-select" class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                        onchange="toggleActionFields(document.querySelector('#job-form select[name=action]').value)">
+                    <option value="spotify" {% if action == 'edit' and (job.service == 'spotify' or not job.service) %}selected{% endif %}>Spotify (via Airfoil)</option>
+                    <option value="applemusic" {% if action == 'edit' and job.service == 'applemusic' %}selected{% endif %}>Apple Music (Direct AirPlay)</option>
+                </select>
+                <div id="service-help-text" class="text-xs text-gray-500 mt-1" hidden>
+                    Select which audio system to use. 'Connect' prepares a zone using either Airfoil or Apple Music's native AirPlay.
+                </div>
+            </div>
+            
+            <!-- Playlist URI (for play action, Spotify) -->
+            <div id="uri-field" class="mb-4" data-show-for="play" hidden>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Playlist/Track</label>
-                
-                <!-- Saved Playlists Picker -->
+                <!-- Saved Playlists Picker (Spotify only) -->
                 <div class="mb-2">
-                    <select id="playlist-picker" onchange="selectSavedPlaylist(this.value)" 
-                            class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <select id="playlist-picker" onchange="selectSavedPlaylist(this.value)" class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="">Select a saved playlist...</option>
                         <!-- Will be populated by JavaScript -->
                     </select>
                 </div>
-                
                 <!-- Manual URI Input -->
                 <div class="text-xs text-gray-500 mb-1">Or enter URI manually:</div>
-                <input type="text" 
-                       name="uri" 
-                       {% if action == 'edit' and job.args.uri %}value="{{ job.args.uri }}"{% endif %}
-                       placeholder="spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"
-                       class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="text" name="uri" {% if action == 'edit' and job.args.uri %}value="{{ job.args.uri }}"{% endif %} placeholder="spotify:playlist:37i9dQZF1DXcBWIGoYBM5M" class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <div class="text-xs text-gray-500 mt-1">Paste Spotify playlist, album, or track URI</div>
+            </div>
+            <!-- Apple Music Playlist Name/ID (for play action, Apple Music) -->
+            <div id="am-playlist-field" class="mb-4" data-show-for="play" hidden>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Apple Music Playlist Name/ID</label>
+                <!-- Saved Playlists Picker (Apple Music only) -->
+                <div class="mb-2">
+                    <select id="am-playlist-picker" onchange="selectSavedAppleMusicPlaylist(this.value)" class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">Select a saved Apple Music playlist...</option>
+                        <!-- Will be populated by JavaScript -->
+                    </select>
+                </div>
+                <!-- Manual Input -->
+                <div class="text-xs text-gray-500 mb-1">Or enter playlist name/ID manually:</div>
+                <input type="text" name="playlist" {% if action == 'edit' and job.args.playlist %}value="{{ job.args.playlist }}"{% endif %} placeholder="e.g. Chill Mix or 1234567890" class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <div class="text-xs text-gray-500 mt-1">Enter the Apple Music playlist name or persistent ID.</div>
             </div>
             
             <!-- Volume Level (for volume action) -->
@@ -160,248 +181,343 @@
 </div>
 
 <script>
-function closeModal() {
-    document.getElementById('modal-container').innerHTML = '';
-}
-
-function toggleActionFields(action) {
-    const uriField = document.getElementById('uri-field');
-    const volumeField = document.getElementById('volume-field');
-    const uriInput = uriField.querySelector('input[name="uri"]');
-    const volumeInput = volumeField.querySelector('input[name="volume"]');
-    
-    // Hide all fields first
-    uriField.style.display = 'none';
-    volumeField.style.display = 'none';
-    uriInput.required = false;
-    volumeInput.required = false;
-    
-    // Show relevant field
-    if (action === 'play') {
-        uriField.style.display = 'block';
-        uriInput.required = true;
-    } else if (action === 'volume') {
-        volumeField.style.display = 'block';
-        volumeInput.required = true;
+(function() {
+    // Modal-scoped logic
+    function closeModal() {
+        document.getElementById('modal-container').innerHTML = '';
     }
-}
 
-// Initialize for edit mode
-const form = document.getElementById('job-form');
-const initialAction = form.dataset.initialAction;
-if (initialAction) {
-    toggleActionFields(initialAction);
-}
+    function toggleActionFields(action) {
+        // Get all DOM elements we need to manipulate
+        const serviceField = document.getElementById('service-field');
+        const serviceLabel = document.getElementById('service-label');
+        const serviceHelpText = document.getElementById('service-help-text');
+        const uriField = document.getElementById('uri-field');
+        const amField = document.getElementById('am-playlist-field');
+        const volumeField = document.getElementById('volume-field');
+        const uriInput = uriField.querySelector('input[name="uri"]');
+        const amPlaylistInput = amField.querySelector('input[name="playlist"]');
+        const volumeInput = volumeField.querySelector('input[name="volume"]');
+        
+        // Get the current service selection
+        const selectedService = document.getElementById('job-service-select').value;
 
-// Load saved playlists for picker
-function loadSavedPlaylists() {
-    fetch('/api/playlists')
-        .then(response => response.json())
-        .then(data => {
-            const picker = document.getElementById('playlist-picker');
-            if (picker && data.playlists) {
-                // Clear existing options except first
-                picker.innerHTML = '<option value="">Select a saved playlist...</option>';
-                
-                // Add playlists
-                data.playlists.forEach(playlist => {
-                    const option = document.createElement('option');
-                    option.value = playlist.uri;
-                    option.textContent = playlist.name;
-                    picker.appendChild(option);
-                });
-            }
-        })
-        .catch(error => console.error('Error loading playlists:', error));
-}
+        // --- 1. Reset State ---
+        // Hide all optional fields and remove 'required' attributes. This is the key to preventing state bugs.
+        serviceField.hidden = true;
+        serviceHelpText.hidden = true;
+        uriField.hidden = true;
+        amField.hidden = true;
+        volumeField.style.display = 'none';
+        uriInput.required = false;
+        amPlaylistInput.required = false;
+        volumeInput.required = false;
+        serviceLabel.textContent = 'Audio Transport'; // Reset label to default
 
-// Function to select a saved playlist
-function selectSavedPlaylist(uri) {
-    if (uri) {
-        const uriInput = document.querySelector('input[name="uri"]');
-        if (uriInput) {
-            uriInput.value = uri;
+        // --- 2. Configure State Based on Action ---
+        // This switch is now the single source of truth for all field visibility.
+        switch (action) {
+            case 'play':
+                serviceField.hidden = false;
+                // Based on the selected service, show the correct playlist input and make it required.
+                if (selectedService === 'spotify') {
+                    uriField.hidden = false;
+                    uriInput.required = true;
+                } else { // 'applemusic'
+                    amField.hidden = false;
+                    amPlaylistInput.required = true;
+                }
+                break;
+            case 'volume':
+                serviceField.hidden = false;
+                volumeField.style.display = 'block';
+                volumeInput.required = true;
+                break;
+            case 'pause':
+            case 'resume':
+                serviceField.hidden = false;
+                break;
+            case 'connect':
+                serviceField.hidden = false;
+                serviceLabel.textContent = 'Audio Transport to Connect';
+                serviceHelpText.hidden = false;
+                break;
+            case 'disconnect':
+                serviceField.hidden = false;
+                serviceLabel.textContent = 'Audio Transport to Disconnect';
+                break;
         }
     }
-}
 
-// Load playlists when modal opens
-loadSavedPlaylists();
+    function loadSavedPlaylists() {
+        fetch('/api/playlists')
+            .then(response => response.json())
+            .then(data => {
+                const service = document.getElementById('job-service-select')?.value || 'spotify';
+                const picker = document.getElementById('playlist-picker');
+                const amPicker = document.getElementById('am-playlist-picker');
+                if (picker) {
+                    picker.innerHTML = '<option value="">Select a saved playlist...</option>';
+                    if (data.playlists) {
+                        data.playlists.filter(p => p.service === 'spotify').forEach(playlist => {
+                            const option = document.createElement('option');
+                            option.value = playlist.uri || '';
+                            option.textContent = playlist.name;
+                            picker.appendChild(option);
+                        });
+                    }
+                }
+                if (amPicker) {
+                    amPicker.innerHTML = '<option value="">Select a saved Apple Music playlist...</option>';
+                    if (data.playlists) {
+                        data.playlists.filter(p => p.service === 'applemusic').forEach(playlist => {
+                            const option = document.createElement('option');
+                            option.value = playlist.playlist || '';
+                            option.textContent = playlist.name;
+                            amPicker.appendChild(option);
+                        });
+                    }
+                }
+            })
+            .catch(error => console.error('Error loading playlists:', error));
+    }
 
-// Handle form submission (override default to handle speakers multi-select)
-form.addEventListener('submit', function(evt) {
-    evt.preventDefault();
-    const formData = new FormData(form);
-    // Collect checked days
-    const daysChecked = Array.from(formData.getAll('days'))
-        .map(day => parseInt(day, 10))
-        .filter(day => !isNaN(day));
-    if (daysChecked.length === 0) {
-        alert('Please select at least one day');
-        return;
-    }
-    // Collect checked speakers
-    const speakersChecked = Array.from(formData.getAll('speakers'));
-    if (speakersChecked.length === 0) {
-        alert('Please select at least one speaker');
-        return;
-    }
-    // Determine zone string
-    let targetZone = '';
-    if (speakersChecked.length === 1) {
-        targetZone = speakersChecked[0];
-    } else if (speakersChecked.includes('All Speakers')) {
-        targetZone = 'All Speakers';
-    } else {
-        targetZone = 'Custom:' + speakersChecked.join(',');
-    }
-    // Build request data
-    const requestData = {
-        days: daysChecked,
-        time: formData.get('time'),
-        action: formData.get('action'),
-        args: {}
-    };
-    // Add action-specific args
-    if (requestData.action === 'play') {
-        const uri = formData.get('uri');
-        if (!uri) {
-            alert('Please enter a Spotify URI');
-            return;
-        }
-        requestData.args.uri = uri;
-    } else if (requestData.action === 'volume') {
-        requestData.args.volume = parseInt(formData.get('volume'));
-    }
-    // Add label
-    requestData.label = formData.get('label') || '';
-    // Debug log
-    console.log('Submitting job:', requestData);
-    // Show saving indicator
-    document.getElementById('saving-indicator').classList.remove('hidden');
-    document.getElementById('save-text').classList.add('hidden');
-    // Make API request
-    let fetchUrl, fetchMethod;
-    if (form.dataset.method === 'PUT') {
-        // For edit, always use the original zone and job id from data-url
-        fetchUrl = form.dataset.url;
-        fetchMethod = 'PUT';
-    } else {
-        // For add, use the new zone
-        fetchUrl = `/api/jobs/${encodeURIComponent(targetZone)}`;
-        fetchMethod = 'POST';
-    }
-    fetch(fetchUrl, {
-        method: fetchMethod,
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestData)
-    })
-    .then(response => {
-        if (response.ok) {
-            // Close modal on success
-            document.getElementById('modal-container').innerHTML = '';
-            
-            // Show success message
-            if (window.AirCron && window.AirCron.showNotification) {
-                window.AirCron.showNotification('Schedule saved successfully');
+    function selectSavedPlaylist(uri) {
+        if (uri) {
+            const uriInput = document.querySelector('input[name="uri"]');
+            if (uriInput) {
+                uriInput.value = uri;
             }
-            
-            // Always refresh the current schedules tab to show all jobs properly
-            const schedulesContent = document.getElementById('schedules-content');
-            // Always update window.currentZone to the new zone
-            window.currentZone = targetZone;
-            if (schedulesContent) {
-                if (typeof updateCurrentZone === 'function') {
-                    try {
-                        updateCurrentZone(targetZone);
-                    } catch (e) {
+        }
+    }
+
+    function selectSavedAppleMusicPlaylist(playlist) {
+        if (playlist) {
+            const amInput = document.querySelector('input[name="playlist"]');
+            if (amInput) {
+                amInput.value = playlist;
+            }
+        }
+    }
+
+    function updateSpeakerCheckboxes() {
+        const allSpeakersBox = document.querySelector('input[name="speakers"][value="All Speakers"]');
+        const otherBoxes = Array.from(document.querySelectorAll('input[name="speakers"]')).filter(cb => cb.value !== 'All Speakers');
+        if (!allSpeakersBox) return;
+        if (allSpeakersBox.checked) {
+            otherBoxes.forEach(cb => {
+                cb.checked = false;
+                cb.disabled = true;
+                cb.parentElement.classList.add('opacity-50');
+            });
+        } else {
+            otherBoxes.forEach(cb => {
+                cb.disabled = false;
+                cb.parentElement.classList.remove('opacity-50');
+            });
+        }
+        // If all other speakers are checked, auto-check All Speakers
+        const allChecked = otherBoxes.length > 0 && otherBoxes.every(cb => cb.checked);
+        if (allChecked) {
+            allSpeakersBox.checked = true;
+            otherBoxes.forEach(cb => {
+                cb.checked = false;
+                cb.disabled = true;
+                cb.parentElement.classList.add('opacity-50');
+            });
+        }
+    }
+
+    function attachSpeakerListeners() {
+        const speakerBoxes = document.querySelectorAll('input[name="speakers"]');
+        speakerBoxes.forEach(cb => {
+            cb.addEventListener('change', updateSpeakerCheckboxes);
+        });
+        updateSpeakerCheckboxes();
+    }
+
+    // Update playlist picker when service changes
+    const serviceSelect = document.getElementById('job-service-select');
+    if (serviceSelect) {
+        serviceSelect.addEventListener('change', function() {
+            loadSavedPlaylists();
+        });
+    }
+
+    // Modal initialization
+    function initJobModal() {
+        const formEl = document.getElementById('job-form');
+        const initialAction = formEl?.dataset.initialAction;
+        if (initialAction) {
+            const actionSelect = formEl.querySelector('select[name="action"]');
+            if (actionSelect) {
+                actionSelect.value = initialAction;
+            }
+            toggleActionFields(initialAction);
+        }
+        loadSavedPlaylists();
+        attachSpeakerListeners();
+
+        // Handle form submission (override default to handle speakers multi-select)
+        formEl.addEventListener('submit', function(evt) {
+            evt.preventDefault();
+            const formData = new FormData(formEl);
+            // Collect checked days
+            const daysChecked = Array.from(formData.getAll('days'))
+                .map(day => parseInt(day, 10))
+                .filter(day => !isNaN(day));
+            if (daysChecked.length === 0) {
+                alert('Please select at least one day');
+                return;
+            }
+            // Collect checked speakers
+            const speakersChecked = Array.from(formData.getAll('speakers'));
+            if (speakersChecked.length === 0) {
+                alert('Please select at least one speaker');
+                return;
+            }
+            // Determine zone string
+            let targetZone = '';
+            if (speakersChecked.length === 1) {
+                targetZone = speakersChecked[0];
+            } else if (speakersChecked.includes('All Speakers')) {
+                targetZone = 'All Speakers';
+            } else {
+                targetZone = 'Custom:' + speakersChecked.join(',');
+            }
+            // Build request data
+            const requestData = {
+                zone: targetZone,  // Add zone to request data
+                days: daysChecked,
+                time: formData.get('time'),
+                action: formData.get('action'),
+                args: {},
+                service: formData.get('service') || 'spotify'  // Ensure service is always included
+            };
+            // Add action-specific args
+            if (requestData.action === 'play') {
+                const service = formData.get('service') || 'spotify';
+                if (service === 'spotify') {
+                    const uri = formData.get('uri');
+                    if (!uri) {
+                        alert('Please enter a Spotify URI');
+                        return;
+                    }
+                    requestData.args.uri = uri;
+                } else if (service === 'applemusic') {
+                    const playlist = formData.get('playlist');
+                    if (!playlist) {
+                        alert('Please enter an Apple Music playlist name or ID');
+                        return;
+                    }
+                    requestData.args.playlist = playlist;
+                }
+                requestData.service = service;
+            } else if (requestData.action === 'volume') {
+                requestData.args.volume = parseInt(formData.get('volume'));
+                // Keep service for volume actions
+                requestData.service = formData.get('service') || 'spotify';
+            } else {
+                // For pause, resume, connect, disconnect - ensure service is included
+                requestData.service = formData.get('service') || 'spotify';
+            }
+            // Add label
+            requestData.label = formData.get('label') || '';
+            // Debug log
+            console.log('Submitting job:', requestData);
+            // Show saving indicator
+            document.getElementById('saving-indicator').classList.remove('hidden');
+            document.getElementById('save-text').classList.add('hidden');
+            // Make API request
+            let fetchUrl, fetchMethod;
+            if (formEl.dataset.method === 'PUT') {
+                // For edit, always use the original zone and job id from data-url
+                fetchUrl = formEl.dataset.url;
+                fetchMethod = 'PUT';
+            } else {
+                // For add, use the new zone
+                fetchUrl = `/api/jobs/${encodeURIComponent(targetZone)}`;
+                fetchMethod = 'POST';
+            }
+            // Zone is included in both URL and request body for consistency
+            fetch(fetchUrl, {
+                method: fetchMethod,
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData)
+            })
+            .then(response => {
+                if (response.ok) {
+                    // Close modal on success
+                    document.getElementById('modal-container').innerHTML = '';
+                    // Show success message
+                    if (window.AirCron && window.AirCron.showNotification) {
+                        window.AirCron.showNotification('Schedule saved successfully');
+                    }
+                    // Always refresh the current schedules tab to show all jobs properly
+                    const schedulesContent = document.getElementById('schedules-content');
+                    // Always update window.currentZone to the new zone
+                    window.currentZone = targetZone;
+                    if (schedulesContent) {
+                        if (typeof updateCurrentZone === 'function') {
+                            try {
+                                updateCurrentZone(targetZone);
+                            } catch (e) {
+                                if (window.AirCron && window.AirCron.showNotification) {
+                                    window.AirCron.showNotification('Zone refresh failed, reloading page...', 'error');
+                                }
+                                location.reload();
+                            }
+                        } else {
+                            // Fallback: force refresh
+                            htmx.ajax('GET', '/zone/' + encodeURIComponent(targetZone), '#schedules-content')
+                                .catch(() => {
+                                    if (window.AirCron && window.AirCron.showNotification) {
+                                        window.AirCron.showNotification('Zone refresh failed, reloading page...', 'error');
+                                    }
+                                    location.reload();
+                                });
+                        }
+                    } else {
+                        // If schedulesContent is missing, reload the page as a last resort
                         if (window.AirCron && window.AirCron.showNotification) {
-                            window.AirCron.showNotification('Zone refresh failed, reloading page...', 'error');
+                            window.AirCron.showNotification('Schedules tab missing, reloading...', 'error');
                         }
                         location.reload();
                     }
+                    // Refresh cron status
+                    if (typeof checkCronStatus === 'function') {
+                        checkCronStatus();
+                    }
                 } else {
-                    // Fallback: force refresh
-                    htmx.ajax('GET', '/zone/' + encodeURIComponent(targetZone), '#schedules-content')
-                        .catch(() => {
-                            if (window.AirCron && window.AirCron.showNotification) {
-                                window.AirCron.showNotification('Zone refresh failed, reloading page...', 'error');
-                            }
-                            location.reload();
-                        });
+                    return response.json().then(data => {
+                        // IMPROVED ERROR HANDLING: Show backend error in a visible notification or alert
+                        let msg = data.error || 'Unknown error occurred';
+                        if (window.AirCron && window.AirCron.showNotification) {
+                            window.AirCron.showNotification(msg, 'error');
+                        } else {
+                            alert('Error: ' + msg);
+                        }
+                        throw new Error(msg);
+                    });
                 }
-            } else {
-                // If schedulesContent is missing, reload the page as a last resort
-                if (window.AirCron && window.AirCron.showNotification) {
-                    window.AirCron.showNotification('Schedules tab missing, reloading...', 'error');
-                }
-                location.reload();
-            }
-            
-            // Refresh cron status
-            if (typeof checkCronStatus === 'function') {
-                checkCronStatus();
-            }
-        } else {
-            return response.json().then(data => {
-                // IMPROVED ERROR HANDLING: Show backend error in a visible notification or alert
-                let msg = data.error || 'Unknown error occurred';
-                if (window.AirCron && window.AirCron.showNotification) {
-                    window.AirCron.showNotification(msg, 'error');
-                } else {
-                    alert('Error: ' + msg);
-                }
-                throw new Error(msg);
+            })
+            .catch(error => {
+                // Hide saving indicator
+                document.getElementById('saving-indicator').classList.add('hidden');
+                document.getElementById('save-text').classList.remove('hidden');
             });
-        }
-    })
-    .catch(error => {
-        // Hide saving indicator
-        document.getElementById('saving-indicator').classList.add('hidden');
-        document.getElementById('save-text').classList.remove('hidden');
-    });
-});
-
-// Speaker multi-select logic
-function updateSpeakerCheckboxes() {
-    const allSpeakersBox = document.querySelector('input[name="speakers"][value="All Speakers"]');
-    const otherBoxes = Array.from(document.querySelectorAll('input[name="speakers"]')).filter(cb => cb.value !== 'All Speakers');
-    if (!allSpeakersBox) return;
-    if (allSpeakersBox.checked) {
-        otherBoxes.forEach(cb => {
-            cb.checked = false;
-            cb.disabled = true;
-            cb.parentElement.classList.add('opacity-50');
-        });
-    } else {
-        otherBoxes.forEach(cb => {
-            cb.disabled = false;
-            cb.parentElement.classList.remove('opacity-50');
         });
     }
-    // If all other speakers are checked, auto-check All Speakers
-    const allChecked = otherBoxes.length > 0 && otherBoxes.every(cb => cb.checked);
-    if (allChecked) {
-        allSpeakersBox.checked = true;
-        otherBoxes.forEach(cb => {
-            cb.checked = false;
-            cb.disabled = true;
-            cb.parentElement.classList.add('opacity-50');
-        });
-    }
-}
 
-// Attach listeners on modal open
-function attachSpeakerListeners() {
-    const speakerBoxes = document.querySelectorAll('input[name="speakers"]');
-    speakerBoxes.forEach(cb => {
-        cb.addEventListener('change', updateSpeakerCheckboxes);
-    });
-    updateSpeakerCheckboxes();
-}
+    // Run modal initialization on open
+    initJobModal();
 
-// Run on modal open
-attachSpeakerListeners();
+    // Expose closeModal for modal overlay
+    window.closeModal = closeModal;
+    window.toggleActionFields = toggleActionFields;
+    window.selectSavedPlaylist = selectSavedPlaylist;
+    window.selectSavedAppleMusicPlaylist = selectSavedAppleMusicPlaylist;
+})();
 </script> 

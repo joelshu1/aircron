@@ -27,14 +27,39 @@ document.addEventListener("DOMContentLoaded", function () {
         .getAll("speakers")
         .map((s) => s.trim())
         .filter(Boolean);
+
+      // Client-side validation to ensure at least one speaker is selected.
+      if (speakers.length === 0) {
+        if (window.AirCron && window.AirCron.showNotification) {
+          window.AirCron.showNotification(
+            "You must select at least one speaker.",
+            "error"
+          );
+        } else {
+          alert("You must select at least one speaker.");
+        }
+        // Re-enable the save button before stopping
+        const saveBtn = form.querySelector("button[type='submit']");
+        const savingIndicator = form.querySelector("#saving-indicator");
+        const saveText = form.querySelector("#save-text");
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          savingIndicator.classList.add("hidden");
+          saveText.classList.remove("hidden");
+        }
+        return; // Stop submission
+      }
+
       let zone = "";
       if (speakers.length === 1) {
         zone = speakers[0];
-      } else if (speakers.length > 1) {
+      } else {
+        // More than one speaker
         if (speakers.includes("All Speakers")) {
           zone = "All Speakers";
         } else {
-          zone = "Custom:" + speakers.join(",");
+          // Sort for consistent zone string: "Custom:A,B" not "Custom:B,A"
+          zone = "Custom:" + speakers.sort().join(",");
         }
       }
       // Build job data
@@ -42,13 +67,18 @@ document.addEventListener("DOMContentLoaded", function () {
       const time = formData.get("time");
       const action = formData.get("action");
       const label = formData.get("label")?.trim() || "";
+      const service = formData.get("service")?.trim() || "spotify";
       const args = {};
       if (action === "play") {
-        args.uri = formData.get("uri")?.trim() || "";
+        if (service === "applemusic") {
+          args.playlist = formData.get("playlist")?.trim() || "";
+        } else {
+          args.uri = formData.get("uri")?.trim() || "";
+        }
       } else if (action === "volume") {
         args.volume = Number(formData.get("volume"));
       }
-      const data = { days, time, action, args, label, zone };
+      const data = { days, time, action, args, label, zone, service };
       const url = form.getAttribute("data-url");
       const method = form.getAttribute("data-method") || "POST";
       const saveBtn = form.querySelector("button[type='submit']");

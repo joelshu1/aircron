@@ -22,6 +22,14 @@
                 
                 <!-- Line 2: Combined Days, Action, Speakers (responsive) -->
                 <div class="flex flex-wrap lg:flex-nowrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
+                    <!-- Service Icon/Label -->
+                    <div class="flex-shrink-0">
+                        {% if job.service == 'applemusic' %}
+                            <span title="Apple Music">🍎 Apple Music</span>
+                        {% else %}
+                            <span title="Spotify">🎵 Spotify</span>
+                        {% endif %}
+                    </div>
                     <!-- Days -->
                     <div class="flex-shrink-0">
                         <span class="font-medium text-gray-700">Days:</span>
@@ -41,6 +49,8 @@
                         <span class="font-medium text-gray-700">Action:</span>
                         {% if job.action == 'play' and job.args.uri %}
                             <span class="truncate">Play: {{ job.args.uri }}</span>
+                        {% elif job.action == 'play' and job.args.playlist %}
+                            <span class="truncate">Play: {{ job.args.playlist }}</span>
                         {% elif job.action == 'pause' %}
                             Pause playback
                         {% elif job.action == 'resume' %}

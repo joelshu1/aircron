@@ -148,13 +148,15 @@
                             actionDescription = job.action;
                         }
                         
+                        let serviceLabel = job.service === 'applemusic' ? '🍎 Apple Music' : '🎵 Spotify';
+                        
                         html += `
                             <div class="border rounded-lg p-3 bg-gray-50 hover:shadow-md transition">
                                 <div class="flex justify-between items-start">
                                     <div class="flex-1 min-w-0">
                                         <!-- Line 1: Title, Time, Status -->
                                         <div class="flex items-center space-x-2 mb-1">
-                                            <span class="font-semibold text-blue-700 truncate">${job.label || job.action.charAt(0).toUpperCase() + job.action.slice(1)}</span>
+                                            <span class="font-semibold text-blue-700 truncate">${serviceLabel} ${job.label || job.action.charAt(0).toUpperCase() + job.action.slice(1)}</span>
                                             <span class="text-sm text-gray-500 flex-shrink-0">${job.time}</span>
                                             <span class="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800 flex-shrink-0">Applied</span>
                                         </div>
@@ -225,6 +227,7 @@
                         <table class="min-w-full bg-white">
                             <thead class="bg-gray-50">
                                 <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Playlist Name</th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Spotify URI</th>
@@ -238,15 +241,19 @@
                 data.playlists.forEach(playlist => {
                     const createdDate = playlist.created_at ? new Date(playlist.created_at).toLocaleDateString() : 'Unknown';
                     const description = playlist.description || '<span class="text-gray-400">No description</span>';
+                    const serviceLabel = playlist.service === 'applemusic' ? '🍎 Apple Music' : '🎵 Spotify';
                     
                     html += `
                         <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="inline-flex items-center gap-1 font-medium">${serviceLabel}</span>
+                            </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="text-sm font-medium text-gray-900">${playlist.name}</div>
                             </td>
                             <td class="px-6 py-4 whitespace-normal text-sm text-gray-600">${description}</td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="font-mono bg-gray-100 p-2 rounded text-xs break-all">${playlist.uri}</div>
+                                <div class="font-mono bg-gray-100 p-2 rounded text-xs break-all">${playlist.uri || ''}</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${createdDate}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">

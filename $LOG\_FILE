@@ -1,0 +1,5 @@
+$(date): DEBUG: Args: $\*
+./aircron_run.sh: line 24: ###########################################################################: command not found
+./aircron_run.sh: line 28: ###########################################################################: command not found
+./aircron_run.sh: line 38: syntax error near unexpected token `('
+./aircron_run.sh: line 38: `def run\_osascript() {'

@@ -8,13 +8,16 @@
             {% if action == 'edit' %}Edit Playlist{% else %}Add Playlist{% endif %}
         </h3>
         
-        <form id="playlist-form" 
+        <form id="playlist-form"
+              hx-post="/api/playlists"
+              hx-target="#playlists-content"
+              hx-swap="innerHTML"
+              hx-on="htmx:afterRequest: window.AirCron.closeModal()"
+              hx-encoding="json"
+              autocomplete="off"
               {% if action == 'edit' %}
               data-method="PUT"
               data-url="/api/playlists/{{ playlist.id }}"
-              {% else %}
-              data-method="POST"
-              data-url="/api/playlists"
               {% endif %}>
             
             <!-- Name Input -->
@@ -38,17 +41,40 @@
                        class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
             
-            <!-- URI Input -->
+            <!-- Service Selector -->
             <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Service *</label>
+                <select name="service" id="playlist-service-select" class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" required onchange="togglePlaylistServiceFields(this.value)">
+                    <option value="spotify" {% if action == 'edit' and playlist.service == 'spotify' %}selected{% endif %}>Spotify</option>
+                    <option value="applemusic" {% if action == 'edit' and playlist.service == 'applemusic' %}selected{% endif %}>Apple Music</option>
+                </select>
+            </div>
+            
+            <!-- Spotify URI Input -->
+            <div class="mb-4" id="spotify-uri-field" {% if action == 'edit' and playlist.service == 'applemusic' %}hidden{% endif %}>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Spotify URI *</label>
                 <input type="text" 
                        name="uri" 
-                       {% if action == 'edit' %}value="{{ playlist.uri }}"{% endif %}
+                       {% if action == 'edit' and playlist.service == 'spotify' %}value="{{ playlist.uri }}"{% endif %}
                        placeholder="spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"
-                       required
-                       class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                       class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       {% if action != 'edit' or (playlist.service == 'spotify') %}required{% endif %}>
                 <div class="text-xs text-gray-500 mt-1">
                     Paste Spotify playlist, album, or track URI. Right-click → Share → Copy Spotify URI
+                </div>
+            </div>
+            
+            <!-- Apple Music Playlist Name/ID Input -->
+            <div class="mb-4" id="applemusic-playlist-field" {% if action == 'edit' and playlist.service != 'applemusic' %}hidden{% endif %}>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Apple Music Playlist Name/ID/URL *</label>
+                <input type="text"
+                       name="playlist"
+                       {% if action == 'edit' and playlist.service == 'applemusic' %}value="{{ playlist.playlist }}"{% endif %}
+                       placeholder="e.g. Chill Mix, 1234567890, or https://music.apple.com/..."
+                       class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       {% if action == 'edit' and playlist.service == 'applemusic' %}required{% endif %}>
+                <div class="text-xs text-gray-500 mt-1">
+                    Enter the Apple Music playlist name, persistent ID, or paste a playlist URL (we'll extract the ID).
                 </div>
             </div>
             
@@ -69,4 +95,48 @@
             </div>
         </form>
     </div>
-</div> 
+</div>
+
+<script>
+(function() {
+    function togglePlaylistServiceFields(service) {
+        const spotifyField = document.getElementById('spotify-uri-field');
+        const amField = document.getElementById('applemusic-playlist-field');
+        const spotifyInput = spotifyField.querySelector('input[name="uri"]');
+        const amInput = amField.querySelector('input[name="playlist"]');
+        if (service === 'spotify') {
+            spotifyField.style.display = 'block';
+            amField.style.display = 'none';
+            if (spotifyInput) spotifyInput.required = true;
+            if (amInput) amInput.required = false;
+        } else if (service === 'applemusic') {
+            spotifyField.style.display = 'none';
+            amField.style.display = 'block';
+            if (spotifyInput) spotifyInput.required = false;
+            if (amInput) amInput.required = true;
+        }
+    }
+
+    // Modal initialization
+    function initPlaylistModal() {
+        const select = document.getElementById('playlist-service-select');
+        if (select) {
+            togglePlaylistServiceFields(select.value);
+            select.addEventListener('change', function() {
+                togglePlaylistServiceFields(this.value);
+            });
+        }
+    }
+
+    // Run modal initialization on open
+    initPlaylistModal();
+
+    // Optionally expose closeModal if needed by modal overlay
+    window.AirCron = window.AirCron || {};
+    if (!window.AirCron.closeModal) {
+        window.AirCron.closeModal = function() {
+            document.getElementById('modal-container').innerHTML = '';
+        };
+    }
+})();
+</script> 
