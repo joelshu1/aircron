@@ -200,13 +200,13 @@ fi
 
 ###########################################################################
 set_global_volume() {
-local pct=${1%%%}   # strip any trailing '%'
-# Set volume for both services
-ensure_music
-run_osascript "tell application \"Music\" to set sound volume to ${pct}"
-if [ -n "$SPOTIFY_CMD" ]; then
-$SPOTIFY_CMD vol ${pct}
-fi
+    local pct=${1%%%}   # strip any trailing '%'
+    # ── Spotify / Airfoil master only ──────────
+    if [ -n "$SPOTIFY_CMD" ]; then
+        $SPOTIFY_CMD vol "$pct"
+    fi
+    # NOTE: We intentionally removed the Music.app line:
+    #   tell application "Music" to set sound volume to ...
 }
 
 set_speaker_volume() {
