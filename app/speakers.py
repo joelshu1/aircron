@@ -19,9 +19,13 @@ class SpeakerDiscovery:
         tell application "Airfoil"
             try
                 set allSpeakers to (name of every speaker)
-                return allSpeakers
+                set oldDelims to AppleScript's text item delimiters
+                set AppleScript's text item delimiters to linefeed
+                set outText to allSpeakers as text
+                set AppleScript's text item delimiters to oldDelims
+                return outText
             on error
-                return {}
+                return ""
             end try
         end tell
         """
@@ -32,13 +36,11 @@ class SpeakerDiscovery:
             )
 
             if result.returncode == 0:
-                # Parse AppleScript list output: "{item1, item2, item3}"
+                # Parse newline-delimited output (preserves commas in names)
                 output = result.stdout.strip()
-                if output and output != "{}":
-                    # Remove braces and split by comma
-                    speakers_str = output.strip("{}")
-                    if speakers_str:
-                        speakers = [s.strip() for s in speakers_str.split(",")]
+                if output:
+                    speakers = [s.strip() for s in output.splitlines() if s.strip()]
+                    if speakers:
                         # Always include "All Speakers" as first option
                         all_speakers = ["All Speakers"] + speakers
                         self.last_speakers = all_speakers
@@ -97,9 +99,13 @@ class SpeakerDiscovery:
         tell application "Airfoil"
             try
                 set connectedSpeakers to (name of speakers whose connected is true)
-                return connectedSpeakers
+                set oldDelims to AppleScript's text item delimiters
+                set AppleScript's text item delimiters to linefeed
+                set outText to connectedSpeakers as text
+                set AppleScript's text item delimiters to oldDelims
+                return outText
             on error
-                return {}
+                return ""
             end try
         end tell
         """
@@ -110,13 +116,11 @@ class SpeakerDiscovery:
             )
 
             if result.returncode == 0:
-                # Parse AppleScript list output: "{item1, item2, item3}"
+                # Parse newline-delimited output (preserves commas in names)
                 output = result.stdout.strip()
-                if output and output != "{}":
-                    # Remove braces and split by comma
-                    speakers_str = output.strip("{}")
-                    if speakers_str:
-                        speakers = [s.strip() for s in speakers_str.split(",")]
+                if output:
+                    speakers = [s.strip() for s in output.splitlines() if s.strip()]
+                    if speakers:
                         logger.info(f"Found {len(speakers)} connected speakers")
                         return speakers
 

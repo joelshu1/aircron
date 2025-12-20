@@ -9,6 +9,20 @@ from ..jobs_store import Job, JobsStore
 logger = logging.getLogger(__name__)
 
 
+def _normalize_volume_arg(args: Dict[str, Any]) -> int:
+    """Ensure volume is present and an int between 0-100."""
+    if "volume" not in args:
+        raise ValueError("Volume action requires 'volume' in args")
+    try:
+        vol = int(args["volume"])
+    except (TypeError, ValueError):
+        raise ValueError("Volume must be an integer 0-100")
+    if vol < 0 or vol > 100:
+        raise ValueError("Volume must be between 0 and 100")
+    args["volume"] = vol
+    return vol
+
+
 def get_jobs_for_zone(zone: str) -> List[Dict[str, Any]]:
     app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
     jobs_store = JobsStore(app_support_dir)
@@ -63,6 +77,8 @@ def create_job(zone: str, data: Dict[str, Any]) -> Dict[str, Any]:
     elif action in ["connect", "disconnect"]:
         if not service or service.strip() == "":
             raise ValueError(f"{action.title()} action requires a valid 'service' to be specified")
+    if action == "volume":
+        _normalize_volume_arg(args)
     if cronblock.cron_manager is None:
         app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
         cronblock.cron_manager = cronblock.CronManager(app_support_dir)
@@ -146,6 +162,8 @@ def update_job(zone: str, job_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
     elif action in ["connect", "disconnect"]:
         if not service or service.strip() == "":
             raise ValueError(f"{action.title()} action requires a valid 'service' to be specified")
+    if action == "volume":
+        _normalize_volume_arg(args)
 
     updated_job = Job(
         job_id=job_id,

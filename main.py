@@ -49,6 +49,21 @@ def check_dependencies() -> None:
             "Install spotify-cli - not found in /usr/local/bin/, /opt/homebrew/bin/, or PATH"
         )
 
+    if shutil.which("osascript") is None:
+        raise RuntimeError("osascript not found - required for AppleScript control")
+
+    # Soft checks for installed apps (do not fail hard; just warn)
+    apps = {
+        "Airfoil": Path("/Applications/Airfoil.app"),
+        "Music": Path("/Applications/Music.app"),
+        "Spotify": Path("/Applications/Spotify.app"),
+    }
+    for name, path in apps.items():
+        if path.exists():
+            logging.info(f"Found {name} at: {path}")
+        else:
+            logging.warning(f"{name} not found at expected path {path}; ensure it is installed")
+
     if shutil.which("crontab") is None:
         raise RuntimeError("cron not found in PATH")
 
