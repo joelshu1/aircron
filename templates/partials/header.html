@@ -5,19 +5,16 @@
             <h1 class="text-2xl font-bold">AirCron</h1>
             <div class="flex space-x-2">
                 <button 
-                    hx-post="/api/speakers/refresh"
-                    hx-trigger="click"
-                    hx-target="#speaker-list"
-                    hx-swap="innerHTML"
+                    onclick="window.AirCron.refreshSpeakers()"
                     class="bg-blue-500 hover:bg-blue-400 px-3 py-1 rounded transition"
                 >
-                    🔄 Refresh
+                    🔄 Refresh Devices
                 </button>
                 <button 
-                    onclick="window.AirCron.showCronReviewModal()"
-                    class="bg-green-500 hover:bg-green-400 px-3 py-1 rounded transition"
+                    onclick="window.AirCron.toggleControlPanel(true)"
+                    class="bg-gray-900 hover:bg-gray-800 px-3 py-1 rounded transition"
                 >
-                    Apply to Cron
+                    🎛 Control Panel
                 </button>
             </div>
         </div>

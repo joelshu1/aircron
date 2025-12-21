@@ -18,12 +18,6 @@
         .tab-content.active {
             display: block;
         }
-        .tab-content.active.schedules-tab {
-            display: block;
-        }
-        .tab-content.active.schedules-tab .flex {
-            display: flex;
-        }
         .main-container {
             max-width: 1200px;
             margin: 0 auto;
@@ -52,14 +46,18 @@
         </div>
     </div>
 
+    <!-- Notifications -->
+    <div id="notification-container" class="fixed top-4 right-4 space-y-2 z-50"></div>
+
     <!-- Modal Container -->
     <div id="modal-container"></div>
+    {% include 'partials/control_drawer.html' %}
 
     <!-- JavaScript Modules -->
     <script src="/static/notifications.js"></script>
-    <script src="/static/modal-manager.js"></script>
-    <script src="/static/schedule-view.js"></script>
     <script src="/static/app-core.js"></script>
+    <script src="/static/schedule-view.js"></script>
+    <script src="/static/control-panel.js"></script>
     <script src="/static/app.js"></script>
     {% block scripts %}{% endblock %}
 </body>

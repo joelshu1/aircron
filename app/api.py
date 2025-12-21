@@ -6,7 +6,7 @@ from typing import Any
 from flask import Blueprint, jsonify, request
 
 from .jobs_store import JobsStore
-from .services import cron_service, jobs_service, playlists_service, speakers_service
+from .services import control_service, cron_service, jobs_service, playlists_service, speakers_service
 from .speakers import speaker_discovery
 
 logger = logging.getLogger(__name__)
@@ -285,3 +285,19 @@ def get_all_jobs_flat() -> Any:
     except Exception as e:
         logger.error(f"Error getting all jobs flat: {e}")
         return jsonify({"error": "Failed to get jobs"}), 500
+
+
+@api_bp.route("/control", methods=["POST"])
+def control_action() -> Any:
+    """Trigger a live control action (connect/disconnect/play/pause/resume/volume)."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        result = control_service.run_control_action(data)
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Error running control action: {e}", exc_info=True)
+        return jsonify({"error": "Failed to run control action"}), 500

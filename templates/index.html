@@ -1,8 +1,6 @@
 {% extends "base.html" %}
 
 {% block content %}
-    {% include 'partials/schedules_tab.html' %}
-    {% include 'partials/cron_jobs_tab.html' %}
     {% include 'partials/view_schedule_tab.html' %}
     {% include 'partials/playlists_tab.html' %}
 {% endblock %}
@@ -12,17 +10,13 @@
     // HTMX configuration
     htmx.config.defaultSwapStyle = 'innerHTML';
     
-    // Track current zone and tab
-    let currentZone = '{{ current_zone }}';
-    window.currentZone = currentZone;
-    let currentTab = 'schedules';
-    let cronStatus = { needs_apply: false };
-    let selectedSpeakers = [];
+    // Track current tab
+    let currentTab = 'schedule';
     
     // Tab switching function
     function switchTab(tabName) {
         // Update tab buttons
-        document.querySelectorAll('[id^="tab-"]').forEach(btn => {
+        document.querySelectorAll('.tab-button').forEach(btn => {
             btn.classList.remove('border-blue-500', 'text-blue-600', 'bg-blue-50');
             btn.classList.add('border-transparent', 'text-gray-600');
         });
@@ -35,170 +29,22 @@
         // Update tab content - hide all tabs first
         document.querySelectorAll('.tab-content').forEach(content => {
             content.classList.remove('active');
-            content.classList.remove('schedules-tab');
         });
         
         // Show the selected tab
         const selectedTab = document.getElementById(`tab-content-${tabName}`);
         selectedTab.classList.add('active');
-        if (tabName === 'schedules') {
-            selectedTab.classList.add('schedules-tab');
-        }
         
         currentTab = tabName;
         
         // Load content for specific tabs
-        if (tabName === 'cron-jobs') {
-            loadCronJobsContent();
-        } else if (tabName === 'playlists') {
+        if (tabName === 'playlists') {
             loadPlaylistsContent();
+        } else if (tabName === 'schedule') {
+            if (window.AirCron && window.AirCron.refreshJobs) {
+                window.AirCron.refreshJobs();
+            }
         }
-    }
-    
-    function updateCurrentZone(zoneName) {
-        currentZone = zoneName;
-        window.currentZone = zoneName;
-        document.getElementById('current-zone-name').innerText = zoneName;
-        
-        // Update the 'Add Schedule' button's context
-        if (window.AirCron && window.AirCron.updateAddScheduleButton) {
-            window.AirCron.updateAddScheduleButton(zoneName);
-        }
-        
-        // Refresh the jobs list for the new zone
-        if (window.AirCron && window.AirCron.refreshZone) {
-            window.AirCron.refreshZone(zoneName);
-        }
-    }
-    
-    // Load cron jobs content
-    function loadCronJobsContent() {
-        fetch('/api/cron/all')
-            .then(response => response.json())
-            .then(data => {
-                const container = document.getElementById('cron-jobs-content');
-                
-                if (!data.has_jobs || data.total_jobs === 0) {
-                    container.innerHTML = `
-                        <div class="text-center text-gray-500 py-12">
-                            <div class="text-6xl mb-4">📝</div>
-                            <h2 class="text-xl font-medium mb-2">No Active Cron Jobs</h2>
-                            <p class="text-gray-600 mb-4">There are currently no schedules applied to cron.</p>
-                            <button onclick="switchTab('schedules')" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition">
-                                Create Schedules
-                            </button>
-                        </div>
-                    `;
-                    return;
-                }
-                
-                let html = `
-                    <div class="bg-white rounded-lg shadow-lg">
-                        <div class="p-6 border-b flex justify-between items-center">
-                            <h2 class="text-xl font-semibold">Active Cron Jobs (${data.total_jobs} total)</h2>
-                            <button 
-                                onclick="window.AirCron.showCronReviewModal()"
-                                class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded transition"
-                            >
-                                Apply Changes
-                            </button>
-                        </div>
-                        <div class="p-6 space-y-6">
-                `;
-                
-                for (const [zone, jobs] of Object.entries(data.zones)) {
-                    let zoneDisplay = zone;
-                    if (zone === "All Speakers") {
-                        zoneDisplay = "🔊 All Speakers";
-                    } else if (zone.startsWith('Custom:')) {
-                        const speakers = zone.replace('Custom:', '').split(',');
-                        zoneDisplay = `🎵 Custom (${speakers.length} speakers)`;
-                    } else {
-                        zoneDisplay = `📻 ${zone}`;
-                    }
-                    
-                    html += `
-                        <div class="border rounded-lg p-4">
-                            <div class="flex justify-between items-center mb-4">
-                                <h3 class="font-medium text-gray-900">${zoneDisplay} (${jobs.length} job${jobs.length !== 1 ? 's' : ''})</h3>
-                                <button onclick="switchTab('schedules'); updateCurrentZone('${zone}')" class="text-sm text-blue-500 hover:text-blue-700">
-                                    Edit Zone →
-                                </button>
-                            </div>
-                            <div class="space-y-3">
-                    `;
-                    
-                    jobs.forEach(job => {
-                        const dayNames = job.days.map(day => {
-                            const dayMap = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun' };
-                            return dayMap[day];
-                        }).join(', ');
-                        
-                        // Format action description
-                        let actionDescription = '';
-                        if (job.action === 'play') {
-                            actionDescription = `Play: ${job.args.uri || 'Unknown playlist'}`;
-                        } else if (job.action === 'pause') {
-                            actionDescription = 'Pause playback';
-                        } else if (job.action === 'resume') {
-                            actionDescription = 'Resume playback';
-                        } else if (job.action === 'volume') {
-                            actionDescription = `Set volume to ${job.args.volume || 50}%`;
-                        } else {
-                            actionDescription = job.action;
-                        }
-                        
-                        let serviceLabel = job.service === 'applemusic' ? '🍎 Apple Music' : '🎵 Spotify';
-                        
-                        html += `
-                            <div class="border rounded-lg p-3 bg-gray-50 hover:shadow-md transition">
-                                <div class="flex justify-between items-start">
-                                    <div class="flex-1 min-w-0">
-                                        <!-- Line 1: Title, Time, Status -->
-                                        <div class="flex items-center space-x-2 mb-1">
-                                            <span class="font-semibold text-blue-700 truncate">${serviceLabel} ${job.label || job.action.charAt(0).toUpperCase() + job.action.slice(1)}</span>
-                                            <span class="text-sm text-gray-500 flex-shrink-0">${job.time}</span>
-                                            <span class="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800 flex-shrink-0">Applied</span>
-                                        </div>
-                                        <!-- Line 2: Combined Days and Action (responsive) -->
-                                        <div class="flex flex-wrap lg:flex-nowrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
-                                            <div class="flex-shrink-0">
-                                                <span class="font-medium text-gray-700">Days:</span> ${dayNames}
-                                            </div>
-                                            <div class="flex-shrink-0">
-                                                <span class="font-medium text-gray-700">Action:</span> ${actionDescription}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="text-xs text-gray-500 flex-shrink-0 ml-4">${job.id.slice(0, 8)}</div>
-                                </div>
-                            </div>
-                        `;
-                    });
-                    
-                    html += `
-                            </div>
-                        </div>
-                    `;
-                }
-                
-                html += `
-                        </div>
-                    </div>
-                `;
-                
-                container.innerHTML = html;
-            })
-            .catch(error => {
-                console.error('Error loading cron jobs:', error);
-                document.getElementById('cron-jobs-content').innerHTML = `
-                    <div class="text-center text-red-500 py-12">
-                        <div class="text-6xl mb-4">❌</div>
-                        <h2 class="text-xl font-medium mb-2">Error Loading Cron Jobs</h2>
-                        <p class="text-red-600">Failed to load cron job data.</p>
-                    </div>
-                `;
-            });
     }
     
     // Load playlists content
@@ -289,8 +135,9 @@
     // Initialize on page load
     document.addEventListener('DOMContentLoaded', function() {
         // Load initial data
-        // loadSpeakerList();
-        updateCurrentZone(currentZone);
+        if (window.AirCron && window.AirCron.refreshJobs) {
+            window.AirCron.refreshJobs();
+        }
         
         // Set initial tab content heights
         setTimeout(() => {

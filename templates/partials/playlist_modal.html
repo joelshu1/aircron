@@ -9,16 +9,16 @@
         </h3>
         
         <form id="playlist-form"
+              {% if action == 'edit' %}
+              hx-put="/api/playlists/{{ playlist.id }}"
+              {% else %}
               hx-post="/api/playlists"
+              {% endif %}
               hx-target="#playlists-content"
               hx-swap="innerHTML"
               hx-on="htmx:afterRequest: window.AirCron.closeModal()"
               hx-encoding="json"
-              autocomplete="off"
-              {% if action == 'edit' %}
-              data-method="PUT"
-              data-url="/api/playlists/{{ playlist.id }}"
-              {% endif %}>
+              autocomplete="off">
             
             <!-- Name Input -->
             <div class="mb-4">

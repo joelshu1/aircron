@@ -1,8 +1,40 @@
-<!-- View Schedule Tab -->
-<div id="tab-content-view-schedule" class="tab-content h-full">
+<!-- Schedule Tab -->
+<div id="tab-content-schedule" class="tab-content active h-full">
     <div class="main-container h-full">
-        <div class="py-6">
-            <div class="flex items-center gap-4 mb-6">
+        <div class="bg-white rounded-lg shadow-lg h-full flex flex-col">
+            <div class="p-6 border-b flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-900">Schedule</h2>
+                    <p class="text-xs text-gray-500 mt-1">Auto-apply is on. Changes are applied immediately.</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button 
+                        id="schedule-filter-toggle"
+                        class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded transition"
+                    >
+                        Filters
+                    </button>
+                    <button 
+                        id="add-schedule-btn"
+                        class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition"
+                    >
+                        + Add Schedule
+                    </button>
+                </div>
+            </div>
+
+            <div class="px-6 pt-4">
+                <div id="schedule-filter-pills" class="flex flex-wrap gap-2"></div>
+                <div id="schedule-filters-panel" class="hidden mt-3 border border-gray-200 rounded-lg bg-gray-50 p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-sm font-semibold text-gray-700">Filter by Zone</h3>
+                        <span class="text-xs text-gray-500">View only · resets on reload</span>
+                    </div>
+                    <div id="schedule-filters-list" class="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm"></div>
+                </div>
+            </div>
+
+            <div class="px-6 pt-6 flex items-center gap-4">
                 <span class="font-semibold text-lg">Select Day:</span>
                 <div id="schedule-day-selector" class="flex gap-2">
                     {% set day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] %}
@@ -11,7 +43,12 @@
                     {% endfor %}
                 </div>
             </div>
-            <div class="overflow-x-auto">
+
+            <div class="px-6 py-4 text-sm text-gray-500">
+                Click any hour row to add a schedule. Multiple jobs can share the same hour.
+            </div>
+
+            <div class="px-6 pb-6 overflow-x-auto">
                 <table class="min-w-full bg-white border rounded-lg">
                     <thead>
                         <tr>
@@ -29,6 +66,3 @@
         </div>
     </div>
 </div>
-<script>
-// Placeholder: actual logic will be injected in app.js
-</script> 

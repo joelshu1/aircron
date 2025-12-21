@@ -214,8 +214,15 @@ def add_job_modal(zone_name: str) -> Any:
     """Show add job modal (HTMX partial)."""
     # Get all available speakers for multi-select
     speakers = speaker_discovery.get_available_speakers()
+    prefill_day = request.args.get("day")
+    prefill_time = request.args.get("time")
     return render_template(
-        "partials/job_modal.html", zone=zone_name, action="add", speakers=speakers
+        "partials/job_modal.html",
+        zone=zone_name,
+        action="add",
+        speakers=speakers,
+        prefill_day=prefill_day,
+        prefill_time=prefill_time,
     )
 
 

@@ -17,6 +17,8 @@
               {% else %}
               data-method="POST"
               data-url="/api/jobs/{{ zone }}"
+              data-prefill-day="{{ prefill_day or '' }}"
+              data-prefill-time="{{ prefill_time or '' }}"
               {% endif %}>
             
             <!-- Label Input -->
@@ -184,7 +186,11 @@
 (function() {
     // Modal-scoped logic
     function closeModal() {
-        document.getElementById('modal-container').innerHTML = '';
+        if (window.AirCron && typeof window.AirCron.closeModal === 'function') {
+            window.AirCron.closeModal();
+        } else {
+            document.getElementById('modal-container').innerHTML = '';
+        }
     }
 
     function toggleActionFields(action) {
@@ -348,12 +354,26 @@
     function initJobModal() {
         const formEl = document.getElementById('job-form');
         const initialAction = formEl?.dataset.initialAction;
+        const prefillDay = formEl?.dataset.prefillDay;
+        const prefillTime = formEl?.dataset.prefillTime;
         if (initialAction) {
             const actionSelect = formEl.querySelector('select[name="action"]');
             if (actionSelect) {
                 actionSelect.value = initialAction;
             }
             toggleActionFields(initialAction);
+        }
+        if (!initialAction && prefillDay) {
+            const dayBoxes = formEl.querySelectorAll('input[name="days"]');
+            dayBoxes.forEach(cb => {
+                cb.checked = cb.value === prefillDay;
+            });
+        }
+        if (!initialAction && prefillTime) {
+            const timeInput = formEl.querySelector('input[name="time"]');
+            if (timeInput && !timeInput.value) {
+                timeInput.value = prefillTime;
+            }
         }
         loadSavedPlaylists();
         attachSpeakerListeners();
@@ -450,45 +470,16 @@
             .then(response => {
                 if (response.ok) {
                     // Close modal on success
-                    document.getElementById('modal-container').innerHTML = '';
+                    closeModal();
                     // Show success message
                     if (window.AirCron && window.AirCron.showNotification) {
-                        window.AirCron.showNotification('Schedule saved successfully');
+                        window.AirCron.showNotification('Schedule saved', 'success');
                     }
-                    // Always refresh the current schedules tab to show all jobs properly
-                    const schedulesContent = document.getElementById('schedules-content');
-                    // Always update window.currentZone to the new zone
-                    window.currentZone = targetZone;
-                    if (schedulesContent) {
-                        if (typeof updateCurrentZone === 'function') {
-                            try {
-                                updateCurrentZone(targetZone);
-                            } catch (e) {
-                                if (window.AirCron && window.AirCron.showNotification) {
-                                    window.AirCron.showNotification('Zone refresh failed, reloading page...', 'error');
-                                }
-                                location.reload();
-                            }
-                        } else {
-                            // Fallback: force refresh
-                            htmx.ajax('GET', '/zone/' + encodeURIComponent(targetZone), '#schedules-content')
-                                .catch(() => {
-                                    if (window.AirCron && window.AirCron.showNotification) {
-                                        window.AirCron.showNotification('Zone refresh failed, reloading page...', 'error');
-                                    }
-                                    location.reload();
-                                });
-                        }
-                    } else {
-                        // If schedulesContent is missing, reload the page as a last resort
-                        if (window.AirCron && window.AirCron.showNotification) {
-                            window.AirCron.showNotification('Schedules tab missing, reloading...', 'error');
-                        }
-                        location.reload();
+                    if (window.AirCron && window.AirCron.refreshJobs) {
+                        window.AirCron.refreshJobs();
                     }
-                    // Refresh cron status
-                    if (typeof checkCronStatus === 'function') {
-                        checkCronStatus();
+                    if (window.AirCron && window.AirCron.applyCron) {
+                        window.AirCron.applyCron();
                     }
                 } else {
                     return response.json().then(data => {
