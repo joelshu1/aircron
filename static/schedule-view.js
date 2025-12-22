@@ -168,7 +168,9 @@ function renderHourlyTable() {
         } else if (job.action === "play" && job.args.playlist) {
           actionText = "Play Playlist";
         } else if (job.action === "volume" && job.args.volume !== undefined) {
-          actionText = `Volume → ${job.args.volume}%`;
+          const volumeScope =
+            job.zone === "All Speakers" ? "Global app volume" : "Per-speaker volume";
+          actionText = `${volumeScope} ${job.args.volume}%`;
         } else if (job.action === "resume") {
           actionText = "Resume Playback";
         } else if (job.action === "pause") {
@@ -310,20 +312,22 @@ document.addEventListener("DOMContentLoaded", function () {
             "bg-blue-600",
             "text-white",
             "border-blue-700",
-            "font-bold",
+            "font-semibold",
             "shadow-sm"
           );
-          b.classList.add("bg-white", "text-gray-700", "border-gray-300");
+          b.classList.add("bg-white", "text-gray-700", "border-gray-300", "hover:bg-blue-50");
+          b.setAttribute("aria-pressed", "false");
         });
 
-        this.classList.remove("bg-white", "text-gray-700", "border-gray-300");
+        this.classList.remove("bg-white", "text-gray-700", "border-gray-300", "hover:bg-blue-50");
         this.classList.add(
           "bg-blue-600",
           "text-white",
           "border-blue-700",
-          "font-bold",
+          "font-semibold",
           "shadow-sm"
         );
+        this.setAttribute("aria-pressed", "true");
 
         state.selectedDay = parseInt(this.dataset.day, 10);
         renderSchedule();
@@ -339,7 +343,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  const addButton = document.getElementById("add-schedule-btn");
+  const addButton = document.getElementById("schedule-add-schedule-btn");
   if (addButton) {
     addButton.addEventListener("click", () => {
       window.AirCron.openAddSchedule({ day: state.selectedDay });

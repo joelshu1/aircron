@@ -31,7 +31,7 @@
             <!-- Speaker Multi-Select -->
             <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-1">Speakers</label>
-                <div class="max-h-32 overflow-y-auto border rounded bg-gray-50 px-2 py-1 flex flex-col gap-1">
+                <div id="job-speakers-list" class="max-h-32 overflow-y-auto border rounded bg-gray-50 px-2 py-1 flex flex-col gap-1">
                     {% set preselected = [] %}
                     {% if zone == 'All Speakers' %}
                         {% set preselected = ['All Speakers'] %}
@@ -47,12 +47,15 @@
                     </label>
                     {% endfor %}
                 </div>
-                <div class="text-xs text-gray-500 mt-1">Select one or more speakers for this schedule</div>
+                <div class="text-xs text-gray-500 mt-1">Select one or more speakers for this schedule. Volume actions use the target selector below.</div>
             </div>
             
             <!-- Days Selection -->
             <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Days</label>
+                <div class="flex items-center justify-between mb-2">
+                    <label class="block text-sm font-medium text-gray-700">Days</label>
+                    <button type="button" id="select-all-days" class="text-xs text-blue-600 hover:text-blue-700">Select all week</button>
+                </div>
                 <div class="grid grid-cols-7 gap-1">
                     {% set day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] %}
                     {% for i in range(7) %}
@@ -62,8 +65,9 @@
                                value="{{ i + 1 }}"
                                {% if action == 'edit' and (i + 1) in job.days %}checked{% endif %}
                                class="sr-only peer">
-                        <div class="w-10 h-8 bg-gray-200 rounded text-xs flex items-center justify-center
-                                   peer-checked:bg-blue-500 peer-checked:text-white transition">
+                        <div class="w-10 h-8 bg-gray-100 border border-gray-200 rounded text-xs flex items-center justify-center
+                                   peer-checked:bg-blue-600 peer-checked:border-blue-600 peer-checked:text-white
+                                   peer-focus-visible:ring-2 peer-focus-visible:ring-blue-400 transition">
                             {{ day_names[i] }}
                         </div>
                     </label>
@@ -144,8 +148,32 @@
                 <div class="text-xs text-gray-500 mt-1">Enter the Apple Music playlist name or persistent ID.</div>
             </div>
             
+            <!-- Volume Target (for volume action) -->
+            <div id="volume-target-field" class="mb-4"
+                 data-show-for="volume"
+                 {% if not (action == 'edit' and job.action == 'volume') %}style="display: none"{% endif %}>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Volume Target</label>
+                <div class="grid grid-cols-2 gap-2">
+                    {% set volume_target = 'per' %}
+                    {% if zone == 'All Speakers' %}
+                        {% set volume_target = 'global' %}
+                    {% endif %}
+                    <label class="border rounded px-3 py-2 text-sm cursor-pointer hover:border-blue-400">
+                        <input type="radio" name="volume_target" value="global" class="mr-2" {% if volume_target == 'global' %}checked{% endif %}>
+                        <span class="font-medium">Global app volume</span>
+                    </label>
+                    <label class="border rounded px-3 py-2 text-sm cursor-pointer hover:border-blue-400">
+                        <input type="radio" name="volume_target" value="per" class="mr-2" {% if volume_target == 'per' %}checked{% endif %}>
+                        <span class="font-medium">Per-speaker volume</span>
+                    </label>
+                </div>
+                <div id="volume-target-help" class="text-xs text-gray-500 mt-1">
+                    Global adjusts the Spotify/Music app volume. Per-speaker adjusts Airfoil (Spotify) or AirPlay device volume (Apple Music).
+                </div>
+            </div>
+
             <!-- Volume Level (for volume action) -->
-            <div id="volume-field" class="mb-4" 
+            <div id="volume-field" class="mb-4"
                  data-show-for="volume"
                  {% if not (action == 'edit' and job.action == 'volume') %}style="display: none"{% endif %}>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Volume Level</label>
@@ -200,6 +228,7 @@
         const serviceHelpText = document.getElementById('service-help-text');
         const uriField = document.getElementById('uri-field');
         const amField = document.getElementById('am-playlist-field');
+        const volumeTargetField = document.getElementById('volume-target-field');
         const volumeField = document.getElementById('volume-field');
         const uriInput = uriField.querySelector('input[name="uri"]');
         const amPlaylistInput = amField.querySelector('input[name="playlist"]');
@@ -214,6 +243,7 @@
         serviceHelpText.hidden = true;
         uriField.hidden = true;
         amField.hidden = true;
+        volumeTargetField.style.display = 'none';
         volumeField.style.display = 'none';
         uriInput.required = false;
         amPlaylistInput.required = false;
@@ -236,6 +266,7 @@
                 break;
             case 'volume':
                 serviceField.hidden = false;
+                volumeTargetField.style.display = 'block';
                 volumeField.style.display = 'block';
                 volumeInput.required = true;
                 break;
@@ -253,6 +284,7 @@
                 serviceLabel.textContent = 'Audio Transport to Disconnect';
                 break;
         }
+        updateSpeakerCheckboxes();
     }
 
     function loadSavedPlaylists() {
@@ -306,10 +338,63 @@
         }
     }
 
+    let savedSpeakerSelection = [];
+
+    function getCurrentAction() {
+        const actionSelect = document.querySelector('#job-form select[name="action"]');
+        return actionSelect ? actionSelect.value : '';
+    }
+
+    function getVolumeTarget() {
+        const target = document.querySelector('input[name="volume_target"]:checked');
+        return target ? target.value : 'per';
+    }
+
+    function cacheSpeakerSelection(otherBoxes) {
+        savedSpeakerSelection = otherBoxes.filter(cb => cb.checked).map(cb => cb.value);
+    }
+
+    function restoreSpeakerSelection(otherBoxes) {
+        if (!savedSpeakerSelection.length) return false;
+        const values = new Set(savedSpeakerSelection);
+        otherBoxes.forEach(cb => {
+            cb.checked = values.has(cb.value);
+        });
+        return otherBoxes.some(cb => cb.checked);
+    }
+
     function updateSpeakerCheckboxes() {
         const allSpeakersBox = document.querySelector('input[name="speakers"][value="All Speakers"]');
         const otherBoxes = Array.from(document.querySelectorAll('input[name="speakers"]')).filter(cb => cb.value !== 'All Speakers');
         if (!allSpeakersBox) return;
+
+        const action = getCurrentAction();
+        const isVolume = action === 'volume';
+        const volumeTarget = getVolumeTarget();
+        const forceGlobal = isVolume && volumeTarget === 'global';
+
+        if (forceGlobal) {
+            cacheSpeakerSelection(otherBoxes);
+            allSpeakersBox.checked = true;
+            allSpeakersBox.disabled = false;
+            allSpeakersBox.parentElement.classList.remove('opacity-50');
+            otherBoxes.forEach(cb => {
+                cb.checked = false;
+                cb.disabled = true;
+                cb.parentElement.classList.add('opacity-50');
+            });
+            return;
+        }
+
+        if (isVolume && volumeTarget === 'per') {
+            allSpeakersBox.checked = false;
+            allSpeakersBox.disabled = true;
+            allSpeakersBox.parentElement.classList.add('opacity-50');
+        } else {
+            allSpeakersBox.disabled = false;
+            allSpeakersBox.parentElement.classList.remove('opacity-50');
+        }
+
         if (allSpeakersBox.checked) {
             otherBoxes.forEach(cb => {
                 cb.checked = false;
@@ -322,15 +407,26 @@
                 cb.parentElement.classList.remove('opacity-50');
             });
         }
-        // If all other speakers are checked, auto-check All Speakers
-        const allChecked = otherBoxes.length > 0 && otherBoxes.every(cb => cb.checked);
-        if (allChecked) {
-            allSpeakersBox.checked = true;
-            otherBoxes.forEach(cb => {
-                cb.checked = false;
-                cb.disabled = true;
-                cb.parentElement.classList.add('opacity-50');
-            });
+
+        if (!isVolume) {
+            const allChecked = otherBoxes.length > 0 && otherBoxes.every(cb => cb.checked);
+            if (allChecked) {
+                allSpeakersBox.checked = true;
+                otherBoxes.forEach(cb => {
+                    cb.checked = false;
+                    cb.disabled = true;
+                    cb.parentElement.classList.add('opacity-50');
+                });
+            }
+        }
+
+        if (isVolume && volumeTarget === 'per') {
+            const anyChecked = otherBoxes.some(cb => cb.checked);
+            if (!anyChecked) {
+                if (!restoreSpeakerSelection(otherBoxes) && otherBoxes[0]) {
+                    otherBoxes[0].checked = true;
+                }
+            }
         }
     }
 
@@ -340,6 +436,25 @@
             cb.addEventListener('change', updateSpeakerCheckboxes);
         });
         updateSpeakerCheckboxes();
+    }
+
+    function attachVolumeTargetListeners() {
+        const volumeTargets = document.querySelectorAll('input[name="volume_target"]');
+        volumeTargets.forEach(radio => {
+            radio.addEventListener('change', updateSpeakerCheckboxes);
+        });
+    }
+
+    function attachDayControls() {
+        const selectAllDaysBtn = document.getElementById('select-all-days');
+        if (selectAllDaysBtn) {
+            selectAllDaysBtn.addEventListener('click', () => {
+                const dayBoxes = document.querySelectorAll('input[name="days"]');
+                dayBoxes.forEach(cb => {
+                    cb.checked = true;
+                });
+            });
+        }
     }
 
     // Update playlist picker when service changes
@@ -377,6 +492,9 @@
         }
         loadSavedPlaylists();
         attachSpeakerListeners();
+        attachVolumeTargetListeners();
+        attachDayControls();
+        updateSpeakerCheckboxes();
 
         // Handle form submission (override default to handle speakers multi-select)
         formEl.addEventListener('submit', function(evt) {
@@ -390,18 +508,28 @@
                 alert('Please select at least one day');
                 return;
             }
+            const action = formData.get('action');
+            const volumeTarget = formData.get('volume_target') || 'per';
+
             // Collect checked speakers
             const speakersChecked = Array.from(formData.getAll('speakers'));
-            if (speakersChecked.length === 0) {
+            if (speakersChecked.length === 0 && !(action === 'volume' && volumeTarget === 'global')) {
                 alert('Please select at least one speaker');
                 return;
             }
+
             // Determine zone string
             let targetZone = '';
-            if (speakersChecked.length === 1) {
-                targetZone = speakersChecked[0];
-            } else if (speakersChecked.includes('All Speakers')) {
+            if (action === 'volume' && volumeTarget === 'global') {
                 targetZone = 'All Speakers';
+            } else if (speakersChecked.includes('All Speakers')) {
+                if (action === 'volume' && volumeTarget === 'per') {
+                    alert('Per-speaker volume cannot use "All Speakers". Select specific speakers.');
+                    return;
+                }
+                targetZone = 'All Speakers';
+            } else if (speakersChecked.length === 1) {
+                targetZone = speakersChecked[0];
             } else {
                 targetZone = 'Custom:' + speakersChecked.join(',');
             }
@@ -410,7 +538,7 @@
                 zone: targetZone,  // Add zone to request data
                 days: daysChecked,
                 time: formData.get('time'),
-                action: formData.get('action'),
+                action: action,
                 args: {},
                 service: formData.get('service') || 'spotify'  // Ensure service is always included
             };

@@ -56,7 +56,11 @@
                         {% elif job.action == 'resume' %}
                             Resume playback
                         {% elif job.action == 'volume' and job.args.volume %}
-                            Set volume to {{ job.args.volume }}%
+                            {% if zone == 'All Speakers' %}
+                                Global app volume: {{ job.args.volume }}%
+                            {% else %}
+                                Per-speaker volume: {{ job.args.volume }}%
+                            {% endif %}
                         {% else %}
                             {{ job.action.title() }}
                         {% endif %}

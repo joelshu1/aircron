@@ -47,8 +47,25 @@
             </div>
         </div>
 
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Volume Target</label>
+            <div class="grid grid-cols-2 gap-2 text-sm">
+                <label class="border rounded px-2 py-1 cursor-pointer hover:border-blue-400">
+                    <input type="radio" name="control-volume-target" value="global" checked class="mr-2">
+                    <span class="font-medium">Global app volume</span>
+                </label>
+                <label class="border rounded px-2 py-1 cursor-pointer hover:border-blue-400">
+                    <input type="radio" name="control-volume-target" value="per" class="mr-2">
+                    <span class="font-medium">Per-speaker volume</span>
+                </label>
+            </div>
+            <div class="text-xs text-gray-500 mt-1">
+                Global ignores speaker selection. Per-speaker uses the selected speakers.
+            </div>
+        </div>
+
         <button id="control-volume-apply" class="w-full bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded">
-            Apply Volume
+            <span id="control-volume-apply-text">Apply Global Volume</span>
         </button>
     </div>
 </aside>

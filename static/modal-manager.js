@@ -114,8 +114,15 @@ window.AirCron.formatJobCard = function (jobDetail, statusType) {
 
   let volumeHtml = "";
   if (job && job.action === "volume" && job.args && job.args.volume) {
+    const scopeLabel = !zone
+      ? "Volume"
+      : zone === "All Speakers"
+      ? "Global app volume"
+      : "Per-speaker volume";
     volumeHtml =
-      '<div class="text-xs text-gray-500">Volume: ' +
+      '<div class="text-xs text-gray-500">' +
+      scopeLabel +
+      ": " +
       job.args.volume +
       "%</div>";
   }

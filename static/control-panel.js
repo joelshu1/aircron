@@ -43,6 +43,31 @@ function updateSpeakerCheckboxes(root) {
   }
 }
 
+function updateControlSpeakerSelectionForVolumeTarget() {
+  const list = document.getElementById("control-speakers-list");
+  if (!list) return;
+  const target = getControlVolumeTarget();
+  const allBox = list.querySelector('input[value="All Speakers"]');
+  const others = Array.from(list.querySelectorAll("input")).filter(
+    (cb) => cb.value !== "All Speakers"
+  );
+  if (!allBox) return;
+
+  if (target === "global") {
+    allBox.checked = true;
+    updateSpeakerCheckboxes(list);
+    return;
+  }
+
+  if (allBox.checked) {
+    allBox.checked = false;
+  }
+  updateSpeakerCheckboxes(list);
+  if (!others.some((cb) => cb.checked) && others[0]) {
+    others[0].checked = true;
+  }
+}
+
 function buildZoneFromSelection(root) {
   const selected = Array.from(root.querySelectorAll("input:checked")).map(
     (cb) => cb.value
@@ -51,6 +76,21 @@ function buildZoneFromSelection(root) {
   if (selected.includes("All Speakers")) return "All Speakers";
   if (selected.length === 1) return selected[0];
   return `Custom:${selected.join(",")}`;
+}
+
+function getControlVolumeTarget() {
+  const selected = document.querySelector(
+    'input[name="control-volume-target"]:checked'
+  );
+  return selected ? selected.value : "global";
+}
+
+function updateVolumeApplyLabel() {
+  const label = document.getElementById("control-volume-apply-text");
+  if (!label) return;
+  const target = getControlVolumeTarget();
+  label.textContent =
+    target === "global" ? "Apply Global Volume" : "Apply Per-Speaker Volume";
 }
 
 window.AirCron.renderControlPanelSpeakers = function () {
@@ -80,6 +120,7 @@ window.AirCron.renderControlPanelSpeakers = function () {
     allBox.checked = true;
     updateSpeakerCheckboxes(list);
   }
+  updateControlSpeakerSelectionForVolumeTarget();
 };
 
 function loadControlPlaylists() {
@@ -103,11 +144,11 @@ function loadControlPlaylists() {
     });
 }
 
-function sendControlAction(action, args = {}) {
+function sendControlAction(action, args = {}, options = {}) {
   const service =
     document.getElementById("control-service")?.value || "spotify";
   const list = document.getElementById("control-speakers-list");
-  const zone = list ? buildZoneFromSelection(list) : "All Speakers";
+  const zone = options.zone || (list ? buildZoneFromSelection(list) : "All Speakers");
   if (!zone) {
     window.AirCron.showNotification("Select at least one speaker", "error");
     return;
@@ -163,6 +204,17 @@ document.addEventListener("DOMContentLoaded", function () {
   const playBtn = document.getElementById("control-play");
   const pauseBtn = document.getElementById("control-pause");
   const volumeApply = document.getElementById("control-volume-apply");
+  const volumeTargets = document.querySelectorAll(
+    'input[name="control-volume-target"]'
+  );
+
+  volumeTargets.forEach((radio) => {
+    radio.addEventListener("change", () => {
+      updateVolumeApplyLabel();
+      updateControlSpeakerSelectionForVolumeTarget();
+    });
+  });
+  updateVolumeApplyLabel();
 
   if (connectBtn) connectBtn.addEventListener("click", () => sendControlAction("connect"));
   if (disconnectBtn) disconnectBtn.addEventListener("click", () => sendControlAction("disconnect"));
@@ -188,7 +240,19 @@ document.addEventListener("DOMContentLoaded", function () {
   if (volumeApply) {
     volumeApply.addEventListener("click", () => {
       const volume = document.getElementById("control-volume")?.value || "50";
-      sendControlAction("volume", { volume: Number(volume) });
+      const volumeTarget = getControlVolumeTarget();
+      const list = document.getElementById("control-speakers-list");
+      let zone = list ? buildZoneFromSelection(list) : "";
+      if (volumeTarget === "global") {
+        zone = "All Speakers";
+      } else if (!zone || zone === "All Speakers") {
+        window.AirCron.showNotification(
+          "Select specific speakers for per-speaker volume",
+          "error"
+        );
+        return;
+      }
+      sendControlAction("volume", { volume: Number(volume) }, { zone });
     });
   }
 });
