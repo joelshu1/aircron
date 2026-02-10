@@ -125,7 +125,12 @@ window.AirCron.renderControlPanelSpeakers = function () {
 
 function loadControlPlaylists() {
   fetch("/api/playlists")
-    .then((resp) => resp.json())
+    .then((resp) => {
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+      }
+      return resp.json();
+    })
     .then((data) => {
       const select = document.getElementById("control-playlist");
       if (!select) return;
@@ -141,6 +146,12 @@ function loadControlPlaylists() {
           option.textContent = playlist.name;
           select.appendChild(option);
         });
+    })
+    .catch((err) => {
+      console.error("Failed to load playlists:", err);
+      if (window.AirCron.showNotification) {
+        window.AirCron.showNotification("Failed to load playlists", "error");
+      }
     });
 }
 

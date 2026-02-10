@@ -147,9 +147,11 @@ class JobsStore:
     def _save_jobs(self, jobs: Dict[str, List[Dict[str, Any]]]) -> None:
         """
         Atomically saves jobs to disk using a file lock and atomic replace to ensure
-        data integrity and prevent race conditions.
+        data integrity and prevent race conditions. Includes stale lock detection
+        and recovery to handle orphaned locks from crashes.
         """
         timeout = 5.0  # 5-second timeout to acquire the lock
+        stale_lock_threshold = 10.0  # 10 seconds before considering a lock stale
         start_time = time.time()
         lock_fd = -1
 
@@ -160,6 +162,20 @@ class JobsStore:
                 lock_fd = os.open(self.lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
                 break  # Lock acquired
             except FileExistsError:
+                # Check if the lock file is stale (leftover from a crash)
+                if self.lock_file.exists():
+                    lock_age = time.time() - self.lock_file.stat().st_mtime
+                    if lock_age > stale_lock_threshold:
+                        logger.warning(
+                            f"Breaking stale lock file: {self.lock_file} (age: {lock_age:.1f}s)"
+                        )
+                        try:
+                            self.lock_file.unlink()
+                        except OSError as e:
+                            logger.error(f"Failed to remove stale lock file: {e}")
+                        # Continue to retry acquiring the lock
+                        continue
+
                 if time.time() - start_time > timeout:
                     raise TimeoutError(
                         f"Could not acquire lock on {self.lock_file} within {timeout}s"

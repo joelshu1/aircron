@@ -125,7 +125,7 @@ def delete_job(zone: str, job_id: str) -> Any:
     try:
         jobs_service.delete_job(zone, job_id)
         logger.info(f"[API] DELETE /jobs/{zone}/{job_id} - Deleted job {job_id} from zone {zone}")
-        return '<div style="display: none;"></div>', 200
+        return jsonify({"deleted": True, "job_id": job_id}), 200
     except ValueError as e:
         logger.warning(f"[API] DELETE /jobs/{zone}/{job_id} - ValueError: {e}")
         return jsonify({"error": str(e)}), 404

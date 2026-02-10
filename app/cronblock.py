@@ -252,7 +252,15 @@ class CronManager:
             raise
 
     def validate_cron_syntax(self, time: str, days: List[int]) -> bool:
-        """Validate cron syntax for given time and days."""
+        """Validate cron syntax for given time and days.
+
+        Args:
+            time: Time string in HH:MM format
+            days: List of integers 1-7 (1=Monday, 7=Sunday)
+
+        Returns:
+            True if syntax is valid, False otherwise
+        """
         try:
             hour_str, minute_str = time.split(":")
             hour = int(hour_str)
@@ -265,6 +273,11 @@ class CronManager:
                     cron_days.append("0")
                 else:
                     cron_days.append(str(day))
+
+            # Validate that days list is not empty after conversion
+            if not cron_days:
+                logger.error("Days list cannot be empty")
+                return False
 
             days_str = ",".join(sorted(cron_days, key=lambda x: int(x)))
 
@@ -297,6 +310,26 @@ class CronManager:
 
 # Global instance - will be initialized when Flask app is created
 cron_manager: Optional[CronManager] = None
+
+
+def get_cron_manager() -> CronManager:
+    """Get or create the global CronManager instance.
+
+    This is a centralized helper function that eliminates code duplication
+    from multiple null-check patterns across services.
+
+    Returns:
+        The global CronManager instance, creating it if necessary.
+
+    Raises:
+        RuntimeError: If called outside of a Flask app context.
+    """
+    global cron_manager
+    if cron_manager is None:
+        from flask import current_app
+        app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
+        cron_manager = CronManager(app_support_dir)
+    return cron_manager
 
 
 def _normalize_cron_line(line: str) -> str:

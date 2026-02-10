@@ -239,12 +239,180 @@ window.AirCron.showCronReviewModal = function () {
     });
 };
 
+// Helper function to render status badge
+function renderStatusBadge(status) {
+  const statusMap = {
+    will_add: { class: "bg-green-100 text-green-800", text: "Will Add" },
+    will_remove: { class: "bg-red-100 text-red-800", text: "Will Remove" },
+    unchanged: { class: "bg-gray-100 text-gray-600", text: "Unchanged" },
+    changed: { class: "bg-yellow-100 text-yellow-800", text: "Changed" }
+  };
+  const config = statusMap[status] || statusMap.unchanged;
+  return `<span class="text-xs px-2 py-1 rounded-full ${config.class}">${config.text}</span>`;
+}
+
+// Helper function to render a single changed job card
+function renderChangedJobCard(chg) {
+  const oldJob = chg.old_job;
+  const diffs = chg.diffs;
+  const dayNames = (oldJob.days || [])
+    .map((d) => ({ 1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat", 7: "Sun" }[d]))
+    .join(", ");
+  const uriHtml =
+    oldJob.action === "play" && oldJob.args && oldJob.args.uri
+      ? '<div class="text-xs text-gray-500 font-mono truncate">' + oldJob.args.uri + "</div>"
+      : "";
+  const volumeHtml =
+    oldJob.action === "volume" && oldJob.args && oldJob.args.volume
+      ? '<div class="text-xs text-gray-500">Volume: ' + oldJob.args.volume + "%</div>"
+      : "";
+  const diffHtml = window.AirCron.formatJobDiff(diffs);
+
+  return (
+    '<div class="border rounded-lg p-4 mb-3 border-yellow-300 bg-yellow-50">' +
+    '<div class="flex items-center space-x-2 mb-2">' +
+    '<span class="font-semibold text-blue-700">' +
+    (oldJob.label || oldJob.action) +
+    "</span>" +
+    '<span class="text-sm text-gray-500">' +
+    oldJob.time +
+    "</span>" +
+    renderStatusBadge("changed") +
+    "</div>" +
+    '<div class="text-sm text-blue-600 mb-2">' +
+    '<span class="font-medium">Zone:</span> ' +
+    oldJob.zone +
+    "</div>" +
+    '<div class="text-sm text-gray-600 mb-2">' +
+    '<span class="font-medium">Days:</span> ' +
+    dayNames +
+    "</div>" +
+    uriHtml +
+    volumeHtml +
+    diffHtml +
+    "</div>"
+  );
+}
+
+// Helper function to render section header with job cards
+function renderJobSection(title, jobs, type) {
+  if (!jobs.length) return "";
+  const emoji = type === "add" ? "✓" : type === "remove" ? "✗" : "→";
+  const colorClass = type === "add" ? "green" : type === "remove" ? "red" : "gray";
+  return (
+    `<div class="mb-6">
+      <h4 class="font-medium text-${colorClass}-700 mb-3">
+        ${emoji} ${jobs.length} job${jobs.length !== 1 ? "s" : ""} will be ${
+      type === "add" ? "added" : type === "remove" ? "removed" : "remain unchanged"
+    }:
+      </h4>
+      <div class="space-y-3">
+        ${jobs.map((job) => window.AirCron.formatJobCard(job, type)).join("")}
+      </div>
+    </div>`
+  );
+}
+
+// Helper function to build the modal HTML content
+function buildModalHTML(data) {
+  if (!data.has_changes) {
+    return `
+      <div class="text-center py-8">
+        <div class="text-green-600 text-5xl mb-4">✓</div>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">All jobs are up to date</h3>
+        <p class="text-gray-600">No changes needed. All stored jobs are already applied to cron.</p>
+      </div>
+    `;
+  }
+
+  // Group job details by status
+  const jobsToAdd = data.job_details.filter((job) => job.status === "will_add");
+  const jobsToRemove = data.job_details.filter((job) => job.status === "will_remove");
+  const jobsUnchanged = data.job_details.filter((job) => job.status === "unchanged");
+  const changedJobs = data.changed_jobs || [];
+
+  let content = `
+    <div class="mb-6">
+      <h3 class="text-lg font-medium text-gray-900 mb-4">
+        Summary: ${data.total_changes} change${data.total_changes !== 1 ? "s" : ""} will be made
+      </h3>
+  `;
+
+  if (changedJobs.length > 0) {
+    content += `
+      <div class="mb-6">
+        <h4 class="font-medium text-yellow-700 mb-3">
+          ⚡ ${changedJobs.length} job${changedJobs.length !== 1 ? "s" : ""} will be changed:
+        </h4>
+        <div class="space-y-3">
+          ${changedJobs.map(renderChangedJobCard).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  content += renderJobSection(jobsToAdd, "add") +
+             renderJobSection(jobsToRemove, "remove") +
+             renderJobSection(jobsUnchanged, "unchanged");
+
+  content += "</div>";
+  return content;
+}
+
+// Helper function to update button states based on data
+function updateButtonStates(data) {
+  const applyBtn = document.getElementById("apply-changes-btn");
+  const toggleBtn = document.getElementById("toggle-cron-details");
+
+  if (data.has_changes) {
+    if (applyBtn) {
+      applyBtn.disabled = false;
+      applyBtn.textContent = `Apply ${data.total_changes} Change${data.total_changes !== 1 ? "s" : ""}`;
+    }
+    if (toggleBtn) {
+      toggleBtn.classList.remove("hidden");
+    }
+  } else {
+    if (applyBtn) {
+      applyBtn.disabled = true;
+      applyBtn.textContent = "No Changes Needed";
+    }
+    if (toggleBtn) {
+      toggleBtn.classList.add("hidden");
+    }
+  }
+}
+
+// Helper function to show error in modal
+function showError(contentElement, message, retryable = false) {
+  contentElement.innerHTML = `
+    <div class="text-red-600 text-center py-8">
+      <p>Error loading preview: ${message}</p>
+      ${retryable ? `
+        <button onclick="window.AirCron.initCronReviewModal()" class="mt-3 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+          Retry
+        </button>
+      ` : ""}
+    </div>
+  `;
+}
+
+// Helper function to show loading state
+function showLoadingState(contentElement) {
+  contentElement.innerHTML = `
+    <div class="text-center py-8">
+      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+      <p class="mt-2 text-gray-600">Loading preview...</p>
+    </div>
+  `;
+}
+
 // Initialize cron review modal (called after HTMX loads content)
 window.AirCron.initCronReviewModal = function () {
   console.log("[AirCron] initCronReviewModal called");
-  // Modal state - scoped to this function to avoid global conflicts
+
+  // Local modal state
   let reviewData = null;
-  let showingCronDetails = false;
 
   // Define modal functions in local scope
   function closeReviewModal() {
@@ -253,11 +421,7 @@ window.AirCron.initCronReviewModal = function () {
 
   function loadReviewContent() {
     console.log("[AirCron] loadReviewContent called");
-    console.log("Loading review content...");
-
-    // Reset state
     reviewData = null;
-    showingCronDetails = false;
 
     const contentElement = document.getElementById("review-content");
     if (!contentElement) {
@@ -266,12 +430,7 @@ window.AirCron.initCronReviewModal = function () {
     }
 
     // Show loading state
-    contentElement.innerHTML = `
-      <div class="text-center py-8">
-        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-        <p class="mt-2 text-gray-600">Loading preview...</p>
-      </div>
-    `;
+    showLoadingState(contentElement);
 
     fetch("/api/cron/preview")
       .then((response) => {
@@ -285,214 +444,19 @@ window.AirCron.initCronReviewModal = function () {
         reviewData = data;
 
         if (data.error) {
-          contentElement.innerHTML = `
-            <div class="text-red-600 text-center py-8">
-              <p>Error loading preview: ${data.error}</p>
-            </div>
-          `;
+          showError(contentElement, data.error);
           return;
         }
 
-        let content = "";
+        // Build and render the modal HTML using helper functions
+        contentElement.innerHTML = buildModalHTML(data);
 
-        if (!data.has_changes) {
-          content = `
-            <div class="text-center py-8">
-              <div class="text-green-600 text-5xl mb-4">✓</div>
-              <h3 class="text-lg font-medium text-gray-900 mb-2">All jobs are up to date</h3>
-              <p class="text-gray-600">No changes needed. All stored jobs are already applied to cron.</p>
-            </div>
-          `;
-          const applyBtn = document.getElementById("apply-changes-btn");
-          const toggleBtn = document.getElementById("toggle-cron-details");
-          if (applyBtn) {
-            applyBtn.disabled = true;
-            applyBtn.textContent = "No Changes Needed";
-          }
-          if (toggleBtn) {
-            toggleBtn.classList.add("hidden");
-          }
-        } else {
-          // Group job details by status
-          const jobsToAdd = data.job_details.filter(
-            (job) => job.status === "will_add"
-          );
-          const jobsToRemove = data.job_details.filter(
-            (job) => job.status === "will_remove"
-          );
-          const jobsUnchanged = data.job_details.filter(
-            (job) => job.status === "unchanged"
-          );
-          const changedJobs = data.changed_jobs || [];
-
-          content = `
-            <div class="mb-6">
-              <h3 class="text-lg font-medium text-gray-900 mb-4">
-                Summary: ${data.total_changes} change${
-            data.total_changes !== 1 ? "s" : ""
-          } will be made
-              </h3>
-              ${
-                changedJobs.length > 0
-                  ? `
-              <div class="mb-6">
-                <h4 class="font-medium text-yellow-700 mb-3">
-                  ⚡ ${changedJobs.length} job${
-                      changedJobs.length !== 1 ? "s" : ""
-                    } will be changed:
-                </h4>
-                <div class="space-y-3">
-                  ${changedJobs
-                    .map((chg) => {
-                      const oldJob = chg.old_job;
-                      const newJob = chg.new_job;
-                      const diffs = chg.diffs;
-                      const dayNames = (oldJob.days || [])
-                        .map(
-                          (d) =>
-                            ({
-                              1: "Mon",
-                              2: "Tue",
-                              3: "Wed",
-                              4: "Thu",
-                              5: "Fri",
-                              6: "Sat",
-                              7: "Sun",
-                            }[d])
-                        )
-                        .join(", ");
-                      const uriHtml =
-                        oldJob.action === "play" &&
-                        oldJob.args &&
-                        oldJob.args.uri
-                          ? '<div class="text-xs text-gray-500 font-mono truncate">' +
-                            oldJob.args.uri +
-                            "</div>"
-                          : "";
-                      const volumeHtml =
-                        oldJob.action === "volume" &&
-                        oldJob.args &&
-                        oldJob.args.volume
-                          ? '<div class="text-xs text-gray-500">Volume: ' +
-                            oldJob.args.volume +
-                            "%</div>"
-                          : "";
-                      const diffHtml = window.AirCron.formatJobDiff(diffs);
-                      return (
-                        '<div class="border rounded-lg p-4 mb-3 border-yellow-300 bg-yellow-50">' +
-                        '<div class="flex items-center space-x-2 mb-2">' +
-                        '<span class="font-semibold text-blue-700">' +
-                        (oldJob.label || oldJob.action) +
-                        "</span>" +
-                        '<span class="text-sm text-gray-500">' +
-                        oldJob.time +
-                        "</span>" +
-                        '<span class="text-xs px-2 py-1 rounded-full bg-yellow-100 text-yellow-800">Changed</span>' +
-                        "</div>" +
-                        '<div class="text-sm text-blue-600 mb-2">' +
-                        '<span class="font-medium">Zone:</span> ' +
-                        oldJob.zone +
-                        "</div>" +
-                        '<div class="text-sm text-gray-600 mb-2">' +
-                        '<span class="font-medium">Days:</span> ' +
-                        dayNames +
-                        "</div>" +
-                        uriHtml +
-                        volumeHtml +
-                        diffHtml +
-                        "</div>"
-                      );
-                    })
-                    .join("")}
-                </div>
-              </div>
-              `
-                  : ""
-              }
-              ${
-                jobsToAdd.length > 0
-                  ? `
-              <div class="mb-6">
-                <h4 class="font-medium text-green-700 mb-3">
-                  ✓ ${jobsToAdd.length} job${
-                      jobsToAdd.length !== 1 ? "s" : ""
-                    } will be added:
-                </h4>
-                <div class="space-y-3">
-                  ${jobsToAdd
-                    .map((job) => window.AirCron.formatJobCard(job, "add"))
-                    .join("")}
-                </div>
-              </div>
-              `
-                  : ""
-              }
-              ${
-                jobsToRemove.length > 0
-                  ? `
-              <div class="mb-6">
-                <h4 class="font-medium text-red-700 mb-3">
-                  ✗ ${jobsToRemove.length} job${
-                      jobsToRemove.length !== 1 ? "s" : ""
-                    } will be removed:
-                </h4>
-                <div class="space-y-3">
-                  ${jobsToRemove
-                    .map((job) => window.AirCron.formatJobCard(job, "remove"))
-                    .join("")}
-                </div>
-              </div>
-              `
-                  : ""
-              }
-              ${
-                jobsUnchanged.length > 0
-                  ? `
-              <div class="mb-6">
-                <h4 class="font-medium text-gray-700 mb-3">
-                  → ${jobsUnchanged.length} job${
-                      jobsUnchanged.length !== 1 ? "s" : ""
-                    } will remain unchanged:
-                </h4>
-                <div class="space-y-3">
-                  ${jobsUnchanged
-                    .map((job) =>
-                      window.AirCron.formatJobCard(job, "unchanged")
-                    )
-                    .join("")}
-                </div>
-              </div>
-              `
-                  : ""
-              }
-            </div>
-          `;
-
-          const applyBtn = document.getElementById("apply-changes-btn");
-          const toggleBtn = document.getElementById("toggle-cron-details");
-          if (applyBtn) {
-            applyBtn.disabled = false;
-            applyBtn.textContent = `Apply ${data.total_changes} Change${
-              data.total_changes !== 1 ? "s" : ""
-            }`;
-          }
-          if (toggleBtn) {
-            toggleBtn.classList.remove("hidden");
-          }
-        }
-
-        contentElement.innerHTML = content;
+        // Update button states
+        updateButtonStates(data);
       })
       .catch((error) => {
         console.error("Error loading cron preview:", error);
-        contentElement.innerHTML = `
-          <div class="text-red-600 text-center py-8">
-            <p>Error loading preview: ${error.message}</p>
-            <button onclick="window.AirCron.initCronReviewModal()" class="mt-3 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
-              Retry
-            </button>
-          </div>
-        `;
+        showError(contentElement, error.message, true);
       });
   }
 

@@ -10,12 +10,6 @@ window.AirCron.state = window.AirCron.state || {
   selectedDay: 1,
 };
 
-window.AirCron.closeModal = function () {
-  const modalContainer = document.getElementById("modal-container");
-  if (modalContainer) {
-    modalContainer.innerHTML = "";
-  }
-};
 
 window.AirCron.openModal = function (url) {
   const modalContainer = document.getElementById("modal-container");
@@ -24,9 +18,18 @@ window.AirCron.openModal = function (url) {
     htmx.ajax("GET", url, { target: modalContainer, swap: "innerHTML" });
   } else {
     fetch(url)
-      .then((resp) => resp.text())
+      .then((resp) => {
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+        }
+        return resp.text();
+      })
       .then((html) => {
         modalContainer.innerHTML = html;
+      })
+      .catch((err) => {
+        console.error("Failed to load modal:", err);
+        window.AirCron.showStatus(`Failed to load modal: ${err.message}`, "error");
       });
   }
 };
@@ -56,11 +59,13 @@ window.AirCron.applyCron = function () {
       }
       return resp.json();
     })
-    .then(() => {
+    .then((data) => {
       window.AirCron.showStatus("✓ Applied to cron", "success");
+      return data;
     })
     .catch((err) => {
       window.AirCron.showStatus(`✗ ${err.message}`, "error");
+      throw err; // Re-throw to allow caller to handle
     });
 };
 

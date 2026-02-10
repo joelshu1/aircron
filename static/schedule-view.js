@@ -241,32 +241,50 @@ function renderHourlyTable() {
   });
 
   hourlyTable.querySelectorAll(".delete-job-btn").forEach((btn) => {
-    btn.addEventListener("click", function (e) {
+    btn.addEventListener("click", async function (e) {
       e.preventDefault();
       e.stopPropagation();
       if (!confirm("Delete this job?")) return;
       const zone = this.dataset.zone;
       const id = this.dataset.id;
-      fetch(`/api/jobs/${encodeURIComponent(zone)}/${id}`, { method: "DELETE" })
-        .then((r) => {
-          if (!r.ok) {
-            return r.json().then((data) => {
-              throw new Error(data.error || "Delete failed");
-            });
-          }
-        })
-        .then(() => {
-          if (window.AirCron.showNotification) {
-            window.AirCron.showNotification("Job deleted", "info");
-          }
-          window.AirCron.refreshJobs();
-          window.AirCron.applyCron();
-        })
-        .catch((err) => {
-          if (window.AirCron.showNotification) {
-            window.AirCron.showNotification(err.message, "error");
-          }
+
+      try {
+        // First, delete the job
+        const deleteResp = await fetch(`/api/jobs/${encodeURIComponent(zone)}/${id}`, {
+          method: "DELETE"
         });
+
+        if (!deleteResp.ok) {
+          const data = await deleteResp.json();
+          throw new Error(data.error || "Delete failed");
+        }
+
+        // Refresh jobs if the function exists
+        if (typeof window.AirCron.refreshJobs === "function") {
+          await window.AirCron.refreshJobs();
+        }
+
+        // Apply cron changes
+        const cronApplyResp = await window.AirCron.applyCron();
+
+        // Only show success after all operations complete
+        if (window.AirCron.showNotification) {
+          window.AirCron.showNotification("Job deleted and cron updated", "success");
+        }
+      } catch (err) {
+        if (window.AirCron.showNotification) {
+          window.AirCron.showNotification(err.message || "Failed to delete job", "error");
+        }
+        console.error("Delete job error:", err);
+        // Refresh jobs to ensure UI is in sync even after error
+        if (typeof window.AirCron.refreshJobs === "function") {
+          try {
+            await window.AirCron.refreshJobs();
+          } catch (refreshErr) {
+            console.error("Failed to refresh jobs after delete error:", refreshErr);
+          }
+        }
+      }
     });
   });
 }

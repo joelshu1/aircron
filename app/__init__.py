@@ -1,6 +1,7 @@
 """AirCron Flask application factory."""
 
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -8,6 +9,44 @@ from flask import Flask
 
 from .api import api_bp
 from .views import views_bp
+
+
+def _validate_app_support_dir(app_support_dir: Path) -> Path:
+    """Validate and resolve the application support directory.
+
+    Args:
+        app_support_dir: Path to validate
+
+    Returns:
+        The resolved, absolute path
+
+    Raises:
+        ValueError: If the path is invalid or unsafe
+    """
+    try:
+        resolved = app_support_dir.resolve()
+    except Exception as e:
+        raise ValueError(f"Invalid APP_SUPPORT_DIR path: {e}")
+
+    # Ensure the path is within the user's home directory or a safe system location
+    home_dir = Path.home()
+    safe_parents = [home_dir, Path("/usr/local"), Path("/opt")]
+
+    is_safe = False
+    for safe_parent in safe_parents:
+        try:
+            resolved.relative_to(safe_parent)
+            is_safe = True
+            break
+        except ValueError:
+            continue
+
+    if not is_safe:
+        raise ValueError(
+            f"APP_SUPPORT_DIR must be within user home directory or safe system location. Got: {resolved}"
+        )
+
+    return resolved
 
 
 def create_app(config: Optional[Dict[str, Any]] = None) -> Flask:
@@ -20,8 +59,16 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> Flask:
     )
 
     # Configure app
+    # Use environment variable for SECRET_KEY, or generate a secure random one for development
+    # In production, AIRCRON_SECRET_KEY should be set to a cryptographically secure value
+    secret_key = os.environ.get("AIRCRON_SECRET_KEY")
+    if not secret_key:
+        import secrets
+        secret_key = secrets.token_hex(32)
+        logging.warning("Using auto-generated SECRET_KEY. Set AIRCRON_SECRET_KEY environment variable for production.")
+
     app.config.update(
-        SECRET_KEY="aircron-dev-key",  # Change for production
+        SECRET_KEY=secret_key,
         JSON_SORT_KEYS=False,
     )
     if config:
@@ -31,12 +78,15 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> Flask:
     app_support_dir = app.config.get("APP_SUPPORT_DIR")
     if not app_support_dir:
         app_support_dir = Path.home() / "Library" / "Application Support" / "AirCron"
-        app_support_dir.mkdir(parents=True, exist_ok=True)
-        app.config["APP_SUPPORT_DIR"] = app_support_dir
     else:
         app_support_dir = Path(app_support_dir)
-        app_support_dir.mkdir(parents=True, exist_ok=True)
-        app.config["APP_SUPPORT_DIR"] = app_support_dir
+
+    # Validate the path is safe
+    app_support_dir = _validate_app_support_dir(app_support_dir)
+
+    # Create directory if it doesn't exist
+    app_support_dir.mkdir(parents=True, exist_ok=True)
+    app.config["APP_SUPPORT_DIR"] = app_support_dir
 
     # Initialize global managers with app context
     with app.app_context():

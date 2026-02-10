@@ -4,12 +4,32 @@ from typing import Any, Dict, List
 from flask import current_app
 
 from .. import cronblock
+from ..cronblock import get_cron_manager
 from ..jobs_store import Job, JobsStore
 
 logger = logging.getLogger(__name__)
 
+VALID_SERVICES = ["spotify", "applemusic"]
 
-def _normalize_volume_arg(args: Dict[str, Any]) -> int:
+
+def _validate_service(service: str) -> str:
+    """Validate and normalize service value.
+
+    Args:
+        service: The service name to validate
+
+    Returns:
+        The normalized (lowercase, stripped) service name
+
+    Raises:
+        ValueError: If service is invalid
+    """
+    if not service or not isinstance(service, str):
+        raise ValueError("Service is required")
+    service = service.strip().lower()
+    if service not in VALID_SERVICES:
+        raise ValueError(f"Service must be one of: {VALID_SERVICES}")
+    return service
     """Ensure volume is present and an int between 0-100."""
     if "volume" not in args:
         raise ValueError("Volume action requires 'volume' in args")
@@ -55,15 +75,7 @@ def create_job(zone: str, data: Dict[str, Any]) -> Dict[str, Any]:
     if action not in valid_actions:
         raise ValueError(f"Invalid action. Must be one of: {valid_actions}")
     args = data.get("args", {})
-    service = data.get("service", "spotify")
-
-    valid_services = ["spotify", "applemusic"]
-    if service not in valid_services:
-        raise ValueError(f"Invalid service. Must be one of: {valid_services}")
-
-    # Additional validation for empty service
-    if not service or service.strip() == "":
-        raise ValueError("Service cannot be empty")
+    service = _validate_service(data.get("service", "spotify"))
 
     if action == "play":
         if service == "spotify":
@@ -79,11 +91,11 @@ def create_job(zone: str, data: Dict[str, Any]) -> Dict[str, Any]:
             raise ValueError(f"{action.title()} action requires a valid 'service' to be specified")
     if action == "volume":
         _normalize_volume_arg(args)
-    if cronblock.cron_manager is None:
-        app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
-        cronblock.cron_manager = cronblock.CronManager(app_support_dir)
-    if not cronblock.cron_manager.validate_cron_syntax(time_str, days):
+
+    cron_manager = get_cron_manager()
+    if not cron_manager.validate_cron_syntax(time_str, days):
         raise ValueError("Invalid cron syntax")
+
     app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
     jobs_store = JobsStore(app_support_dir)
     job_id = jobs_store.create_job_id()
@@ -136,15 +148,7 @@ def update_job(zone: str, job_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
     args = data.get("args", existing_job.args)
     label = data.get("label", getattr(existing_job, "label", ""))
     time_val = data.get("time", existing_job.time)
-    service = data.get("service", getattr(existing_job, "service", "spotify"))
-
-    valid_services = ["spotify", "applemusic"]
-    if service not in valid_services:
-        raise ValueError(f"Invalid service. Must be one of: {valid_services}")
-
-    # Additional validation for empty service
-    if not service or service.strip() == "":
-        raise ValueError("Service cannot be empty")
+    service = _validate_service(data.get("service", getattr(existing_job, "service", "spotify")))
 
     valid_actions = ["play", "pause", "resume", "volume", "connect", "disconnect"]
     if action not in valid_actions:
@@ -175,11 +179,11 @@ def update_job(zone: str, job_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         label=label,
         service=service,
     )
-    if cronblock.cron_manager is None:
-        app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
-        cronblock.cron_manager = cronblock.CronManager(app_support_dir)
-    if not cronblock.cron_manager.validate_cron_syntax(updated_job.time, updated_job.days):
+
+    cron_manager = get_cron_manager()
+    if not cron_manager.validate_cron_syntax(updated_job.time, updated_job.days):
         raise ValueError("Invalid cron syntax")
+
     # If zone changed, remove from old zone and add to new zone
     new_zone = data.get("zone", zone)
     if new_zone != zone:

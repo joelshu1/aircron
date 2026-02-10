@@ -2,6 +2,7 @@
 """AirCron UI - Flask server entry point (no tray)."""
 
 import logging
+import os
 import shutil
 import threading
 import webbrowser
@@ -79,7 +80,7 @@ def main() -> None:
         return
 
     flask_app = create_app()
-    port = 3009
+    port = int(os.environ.get("AIRCRON_PORT", "3009"))
 
     def run_flask():
         flask_app.run(host="127.0.0.1", port=port, debug=False)

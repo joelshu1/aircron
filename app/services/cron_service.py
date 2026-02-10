@@ -6,16 +6,14 @@ from typing import Any, Dict, List, Optional
 from flask import current_app
 
 from .. import cronblock
-from ..cronblock import _normalize_cron_line
+from ..cronblock import _normalize_cron_line, get_cron_manager
 from ..jobs_store import Job, JobsStore
 
 logger = logging.getLogger(__name__)
 
 
 def apply_jobs_to_cron() -> Dict[str, Any]:
-    if cronblock.cron_manager is None:
-        app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
-        cronblock.cron_manager = cronblock.CronManager(app_support_dir)
+    cron_manager = get_cron_manager()
     app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
     jobs_store = JobsStore(app_support_dir)
     jobs_file = jobs_store.jobs_file
@@ -27,7 +25,7 @@ def apply_jobs_to_cron() -> Dict[str, Any]:
     logger.info(
         f"[cron_service] Apply cron called with {len(all_jobs)} zones and {total_jobs} total jobs"
     )
-    cronblock.cron_manager.apply_jobs_to_cron()
+    cron_manager.apply_jobs_to_cron()
     if total_jobs == 0:
         logger.info("[cron_service] Successfully cleared all jobs from crontab")
     else:
@@ -36,16 +34,14 @@ def apply_jobs_to_cron() -> Dict[str, Any]:
 
 
 def get_cron_status() -> Dict[str, Any]:
-    if cronblock.cron_manager is None:
-        app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
-        cronblock.cron_manager = cronblock.CronManager(app_support_dir)
+    cron_manager = get_cron_manager()
     app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
     jobs_store = JobsStore(app_support_dir)
     jobs_file = jobs_store.jobs_file
     if not jobs_file.exists():
         jobs_file.touch()
         jobs_file.write_text(json.dumps({}))
-    current_lines = cronblock.cron_manager._get_current_crontab()
+    current_lines = cron_manager._get_current_crontab()
     has_aircron_section = False
     current_cron_jobs = []
     in_aircron_section = False
@@ -65,7 +61,7 @@ def get_cron_status() -> Dict[str, Any]:
     expected_cron_lines = []
     for zone, jobs in all_jobs.items():
         for job in jobs:
-            cron_line = cronblock.cron_manager._job_to_cron_line(job)
+            cron_line = cron_manager._job_to_cron_line(job)
             if cron_line:
                 expected_cron_lines.append(_normalize_cron_line(cron_line))
     has_jobs_in_cron = len(current_cron_jobs) > 0
@@ -128,15 +124,14 @@ def get_cron_preview() -> Dict[str, Any]:
 
     # Map expected cron lines back to their job objects for rich details
     app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
-    if cronblock.cron_manager is None:
-        cronblock.cron_manager = cronblock.CronManager(app_support_dir)
+    cron_manager = get_cron_manager()
     jobs_store = JobsStore(app_support_dir)
     all_jobs = jobs_store.get_all_jobs()
 
     expected_line_to_job = {}
     for _, jobs in all_jobs.items():
         for job in jobs:
-            cron_line = cronblock.cron_manager._job_to_cron_line(job)
+            cron_line = cron_manager._job_to_cron_line(job)
             if cron_line:
                 normalized_line = _normalize_cron_line(cron_line)
                 expected_line_to_job[normalized_line] = job
@@ -187,10 +182,8 @@ def get_cron_preview() -> Dict[str, Any]:
 
 
 def get_current_cron_jobs() -> Dict[str, Any]:
-    if cronblock.cron_manager is None:
-        app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
-        cronblock.cron_manager = cronblock.CronManager(app_support_dir)
-    current_lines = cronblock.cron_manager._get_current_crontab()
+    cron_manager = get_cron_manager()
+    current_lines = cron_manager._get_current_crontab()
     aircron_lines = []
     in_aircron_section = False
     for line in current_lines:
@@ -211,9 +204,7 @@ def get_current_cron_jobs() -> Dict[str, Any]:
 
 
 def get_all_cron_jobs() -> Dict[str, Any]:
-    if cronblock.cron_manager is None:
-        app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
-        cronblock.cron_manager = cronblock.CronManager(app_support_dir)
+    cron_manager = get_cron_manager()
     app_support_dir = current_app.config.get("APP_SUPPORT_DIR")
     jobs_store = JobsStore(app_support_dir)
     all_jobs = jobs_store.get_all_jobs()
@@ -225,7 +216,7 @@ def get_all_cron_jobs() -> Dict[str, Any]:
     for zone, jobs in all_jobs.items():
         jobs_with_status[zone] = []
         for job in jobs:
-            cron_line = cronblock.cron_manager._job_to_cron_line(job)
+            cron_line = cron_manager._job_to_cron_line(job)
             status = "pending"
             if cron_line and _normalize_cron_line(cron_line) in current_cron_jobs:
                 status = "applied"
