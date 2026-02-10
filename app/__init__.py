@@ -1,7 +1,6 @@
 """AirCron Flask application factory."""
 
 import logging
-import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -59,16 +58,10 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> Flask:
     )
 
     # Configure app
-    # Use environment variable for SECRET_KEY, or generate a secure random one for development
-    # In production, AIRCRON_SECRET_KEY should be set to a cryptographically secure value
-    secret_key = os.environ.get("AIRCRON_SECRET_KEY")
-    if not secret_key:
-        import secrets
-        secret_key = secrets.token_hex(32)
-        logging.warning("Using auto-generated SECRET_KEY. Set AIRCRON_SECRET_KEY environment variable for production.")
-
+    # SECRET_KEY is required by Flask but not used by this app (no sessions/cookies)
+    # Set a default to avoid Flask warnings
     app.config.update(
-        SECRET_KEY=secret_key,
+        SECRET_KEY="dev-only-not-for-production",
         JSON_SORT_KEYS=False,
     )
     if config:
