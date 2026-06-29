@@ -342,7 +342,7 @@ case "$1" in
                 set matches to (every speaker whose name is \"${esc_spk}\")
                 if (count of matches) is 0 then error \"Airfoil speaker not found: ${esc_spk}\"
                 repeat with s in matches
-                    set volume of s to ${f}
+                    set (volume of s) to ${f}
                 end repeat
             end tell" || return $?
         done
