@@ -111,13 +111,22 @@ ensure_app() {
 # run osascript with logging
 
 run_osascript() {
-local script="$1"
-echo "$(date): Running osascript >>>"
-echo "$script"
-echo "$script" | /usr/bin/osascript 2>&1
-local rc=${PIPESTATUS[1]}
-[ $rc -ne 0 ] && echo "$(date): osascript exit $rc"
-return $rc
+    local script="$1"
+    echo "$(date): Running osascript >>>"
+    echo "$script"
+    echo "$script" | /usr/bin/osascript 2>&1
+    local rc=${PIPESTATUS[1]}
+    [ $rc -ne 0 ] && echo "$(date): osascript exit $rc"
+    return $rc
+}
+
+run_or_fail() {
+    "$@"
+    local rc=$?
+    if [ $rc -ne 0 ]; then
+        echo "$(date): ERROR: Command failed with exit $rc: $*"
+        exit $rc
+    fi
 }
 
 # Ensure Music.app is running
@@ -297,7 +306,9 @@ set_global_volume() {
     case "$service" in
         spotify)
             if ensure_spotify_cli; then
-                $SPOTIFY_CMD vol "$pct"
+                run_or_fail "$SPOTIFY_CMD" vol "$pct"
+            else
+                return 1
             fi
             ;;
         applemusic)
@@ -306,6 +317,7 @@ set_global_volume() {
             ;;
         *)
             echo "$(date): WARN: Unknown service '$service' for volume"
+            return 1
             ;;
     esac
 }
@@ -327,10 +339,12 @@ case "$1" in
             clean_spk="$(normalize_speaker_name "$spk")"
             esc_spk=$(essc "$clean_spk")
             run_osascript "tell application \"Airfoil\"
-                try
-                    set (volume of (first speaker whose name is \"${esc_spk}\")) to ${f}
-                end try
-            end tell"
+                set matches to (every speaker whose name is \"${esc_spk}\")
+                if (count of matches) is 0 then error \"Airfoil speaker not found: ${esc_spk}\"
+                repeat with s in matches
+                    set volume of s to ${f}
+                end repeat
+            end tell" || return $?
         done
         ;;
     applemusic)
@@ -339,22 +353,27 @@ case "$1" in
             clean_spk="$(normalize_speaker_name "$spk")"
             esc_spk=$(essc "$clean_spk")
             run_osascript "tell application \"Music\"
-                try
-                    if \"${esc_spk}\" is \"All Speakers\" then
-                        repeat with d in (every AirPlay device)
-                            set volume of d to ${pct}
-                        end repeat
-                    else
-                        repeat with d in (every AirPlay device)
-                            if name of d is \"${esc_spk}\" then set volume of d to ${pct}
-                        end repeat
-                    end if
-                end try
-            end tell"
+                set matchedCount to 0
+                if \"${esc_spk}\" is \"All Speakers\" then
+                    repeat with d in (every AirPlay device)
+                        set sound volume of d to ${pct}
+                        set matchedCount to matchedCount + 1
+                    end repeat
+                else
+                    repeat with d in (every AirPlay device)
+                        if name of d is \"${esc_spk}\" then
+                            set sound volume of d to ${pct}
+                            set matchedCount to matchedCount + 1
+                        end if
+                    end repeat
+                end if
+                if matchedCount is 0 then error \"Apple Music AirPlay device not found: ${esc_spk}\"
+            end tell" || return $?
         done
         ;;
     *)
         echo "$(date): WARN: Unknown service '$1' for speaker volume"
+        return 1
         ;;
 esac
 }
@@ -398,9 +417,9 @@ fi
 ;;
 volume)
 if [ "$SPEAKER" = "All Speakers" ]; then
-set_global_volume "$SERVICE" "$ARG1"
+run_or_fail set_global_volume "$SERVICE" "$ARG1"
 else
-set_speaker_volume "$SERVICE" "$SPEAKER" "$ARG1"
+run_or_fail set_speaker_volume "$SERVICE" "$SPEAKER" "$ARG1"
 fi
 ;;
 connect)

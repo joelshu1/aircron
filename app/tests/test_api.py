@@ -8,7 +8,7 @@ from app import create_app
 
 
 @pytest.fixture
-def client() -> Any:
+def client(monkeypatch: Any) -> Any:
     temp_dir = tempfile.TemporaryDirectory()
     app = create_app(
         {
@@ -16,6 +16,12 @@ def client() -> Any:
             "APP_SUPPORT_DIR": Path(temp_dir.name),
         }
     )
+    from app import cronblock
+
+    monkeypatch.setattr(cronblock.CronManager, "_get_current_crontab", lambda self: [])
+    monkeypatch.setattr(cronblock.CronManager, "_backup_crontab", lambda self, lines: None)
+    monkeypatch.setattr(cronblock.CronManager, "_write_crontab", lambda self, lines: None)
+
     with app.test_client() as client:
         yield client
     temp_dir.cleanup()

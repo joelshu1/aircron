@@ -1,6 +1,7 @@
 """AirCron Flask application factory."""
 
 import logging
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -29,7 +30,12 @@ def _validate_app_support_dir(app_support_dir: Path) -> Path:
 
     # Ensure the path is within the user's home directory or a safe system location
     home_dir = Path.home()
-    safe_parents = [home_dir, Path("/usr/local"), Path("/opt")]
+    safe_parents = [
+        home_dir,
+        Path("/usr/local"),
+        Path("/opt"),
+        Path(tempfile.gettempdir()).resolve(),
+    ]
 
     is_safe = False
     for safe_parent in safe_parents:

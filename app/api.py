@@ -75,6 +75,9 @@ def create_job(zone: str) -> Any:
             or "Days must be a non-empty list" in msg
             or "Invalid action" in msg
             or "Invalid service" in msg
+            or "Service is required" in msg
+            or "Service must be" in msg
+            or "Volume must" in msg
             or "requires" in msg
         ):
             logger.warning(f"[API] POST /jobs/{zone} - BadRequest: {e}")
@@ -111,6 +114,18 @@ def update_job(original_zone: str, job_id: str) -> Any:
         if "Job not found" in msg:
             logger.warning(f"[API] PUT /jobs/{original_zone}/{job_id} - NotFound: {e}")
             return jsonify({"error": msg}), 404
+        if (
+            "Invalid time format" in msg
+            or "Invalid time range" in msg
+            or "Days must" in msg
+            or "Invalid action" in msg
+            or "Service is required" in msg
+            or "Service must be" in msg
+            or "Volume must" in msg
+            or "requires" in msg
+        ):
+            logger.warning(f"[API] PUT /jobs/{original_zone}/{job_id} - BadRequest: {e}")
+            return jsonify({"error": msg}), 400
         logger.warning(f"[API] PUT /jobs/{original_zone}/{job_id} - ValueError: {e}")
         return jsonify({"error": msg}), 409
     except Exception as e:
@@ -298,6 +313,8 @@ def control_action() -> Any:
         return jsonify(result)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 500
     except Exception as e:
         logger.error(f"Error running control action: {e}", exc_info=True)
         return jsonify({"error": "Failed to run control action"}), 500

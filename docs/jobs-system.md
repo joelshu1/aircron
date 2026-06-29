@@ -64,7 +64,8 @@ User-defined combinations of speakers:
 
 **Behavior:**
 - Connects only specified speakers
-- Volume controls per-speaker volume in Airfoil
+- Volume controls per-speaker volume for the selected service
+- Spotify volume targets Airfoil speakers; Apple Music volume targets Music.app AirPlay devices
 
 ### 3. Individual Speakers
 
@@ -76,7 +77,8 @@ Single speaker zones:
 
 **Behavior:**
 - Controls only that speaker
-- Volume controls per-speaker volume
+- Volume controls per-speaker volume for the selected service
+- Apple Music speaker names must match Music.app AirPlay device names
 
 ---
 

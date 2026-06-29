@@ -16,7 +16,7 @@ AirCron UI replaces manual script editing and `crontab -e` with an intuitive web
 ### ✨ Key Features
 
 - **🔊 Multi-Zone Audio Control** - Schedule actions for individual speakers, custom groups, or all speakers simultaneously (Spotify and Apple Music supported)
-- **🎵 Dual Service & Volume Architecture** - Global Spotify or Apple Music volume control + individual Airfoil speaker volume management
+- **🎵 Dual Service & Volume Architecture** - Global Spotify or Apple Music volume control plus service-specific per-speaker volume management
 - **📅 Visual Schedule Management** - 24-hour grid view with color-coded actions and drag-and-drop simplicity
 - **🍃 Lightweight Tray App** - Runs silently in the menu bar, auto-launches browser interface
 - **⚡ Real-Time Speaker Discovery** - Automatic detection of available Airfoil speakers via AppleScript
@@ -227,10 +227,12 @@ AirCron implements sophisticated dual volume control:
 
 #### 📻 Individual/Custom Speaker Volume Control
 
-- **Method:** Airfoil per-speaker volume via AppleScript
+- **Spotify Method:** Airfoil per-speaker volume via AppleScript
+- **Apple Music Method:** Music.app AirPlay device `sound volume` via AppleScript
 - **Range:** 0-100% (converted to 0.0-1.0 for Airfoil)
 - **Effect:** Independent volume control per speaker
 - **Use Case:** Zone-specific audio levels, complex routing scenarios
+- **Failure Behavior:** Missing speaker/device matches are logged and return a failed control action instead of silently succeeding
 
 ### 🎵 Action Types
 
@@ -239,7 +241,7 @@ AirCron implements sophisticated dual volume control:
 | **Play**       | Starts playback of specific content. Ensures the target zone is connected to the selected service's audio transport before playing.                   | Spotify URI or Apple Music Playlist Name |      Yes      |
 | **Pause**      | Stops playback for the specified service.                                                                                                             | None                                     |      Yes      |
 | **Resume**     | Resumes playback for the specified service.                                                                                                           | None                                     |      Yes      |
-| **Volume**     | Adjusts volume for the specified service (global) or for a zone (per-speaker via Airfoil).                                                            | Percentage (0-100)                       |      Yes      |
+| **Volume**     | Adjusts global app volume for "All Speakers" or per-speaker volume for a zone. Spotify uses Airfoil speaker volume; Apple Music uses Music.app AirPlay device volume. | Percentage (0-100)                       |      Yes      |
 | **Connect**    | Prepares a zone for playback by connecting speakers to the specified service's audio transport (Airfoil for Spotify, native AirPlay for Apple Music). | None                                     |      Yes      |
 | **Disconnect** | Disconnects all speakers in the target zone from the specified service's audio transport.                                                             | None                                     |      Yes      |
 
@@ -487,6 +489,13 @@ tail -f ~/Library/Logs/AirCron/cron.log
 # Verify crontab entries
 crontab -l | grep -A 20 "BEGIN AirCron"
 ```
+
+#### "Apple Music volume does not change"
+
+- For "All Speakers", AirCron sets Music.app global `sound volume`.
+- For individual or custom zones, AirCron sets each matching Music.app AirPlay device's `sound volume`.
+- The selected speaker names must match Music.app AirPlay device names. If no device matches, the action fails and the details are written to `~/Library/Logs/AirCron/cron.log`.
+- If the UI reports a control failure, check the cron log for the exact AirPlay device name that was not found.
 
 #### "Port 3009 already in use"
 

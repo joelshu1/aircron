@@ -110,7 +110,7 @@ Single speaker identified by name.
 
 **Behavior:**
 - Controls only the named speaker
-- Volume controls Airfoil per-speaker volume
+- Volume controls service-specific per-speaker volume
 - Can be combined into custom zones
 
 **Discovery:** Speaker names come from Airfoil
@@ -155,13 +155,19 @@ osascript -e 'tell application "Spotify" to set sound volume to 75'
 #### Per-Speaker Volume
 
 - **Zone:** Individual or Custom zones
-- **Target:** Airfoil speaker volume
-- **Control:** Airfoil per-speaker volume
+- **Spotify Target:** Airfoil speaker volume
+- **Apple Music Target:** Music.app AirPlay device sound volume
+- **Control:** Service-specific per-speaker volume
 
 **Implementation:**
 ```bash
-# Via AppleScript to Airfoil
+# Spotify via AppleScript to Airfoil
 osascript -e 'tell application "Airfoil" to set volume of speaker "Office" to 75'
+
+# Apple Music via AppleScript to Music.app AirPlay device volume
+osascript -e 'tell application "Music" to repeat with d in (every AirPlay device)
+    if name of d is "Office" then set sound volume of d to 75
+end repeat'
 ```
 
 ### Volume API
@@ -178,9 +184,9 @@ def run_control_action(data):
             # Set app volume
             set_apple_music_volume(volume)
         else:
-            # Set Airfoil speaker volume(s)
+            # Set service-specific speaker/device volume
             for speaker in parse_zone(zone):
-                set_airfoil_speaker_volume(speaker, volume)
+                set_speaker_volume(service, speaker, volume)
 ```
 
 ## Connection Management
@@ -346,12 +352,14 @@ function updateSpeakerCheckboxes(root) {
 **Possible Causes:**
 1. Wrong volume scope (global vs per-speaker)
 2. Application not running
-3. Airfoil speaker disconnected
+3. Airfoil speaker disconnected or Music.app AirPlay device name mismatch
+4. AppleScript command failed; see `~/Library/Logs/AirCron/cron.log`
 
 **Solutions:**
 1. Verify zone matches intended scope
 2. Start Spotify/Music.app
 3. Check speaker connection status
+4. For Apple Music, verify the selected name matches a Music.app AirPlay device name
 
 ## See Also
 

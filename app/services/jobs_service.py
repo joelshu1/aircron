@@ -30,6 +30,9 @@ def _validate_service(service: str) -> str:
     if service not in VALID_SERVICES:
         raise ValueError(f"Service must be one of: {VALID_SERVICES}")
     return service
+
+
+def _normalize_volume_arg(args: Dict[str, Any]) -> int:
     """Ensure volume is present and an int between 0-100."""
     if "volume" not in args:
         raise ValueError("Volume action requires 'volume' in args")

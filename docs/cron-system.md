@@ -180,7 +180,7 @@ Audio output to speakers
 | play | `spotify play {uri}` | AppleScript to Music.app |
 | pause | `spotify pause` | AppleScript pause |
 | resume | `spotify resume` | AppleScript play |
-| volume | Set app volume | AppleScript volume |
+| volume | `All Speakers`: Spotify app volume; individual/custom zones: Airfoil speaker volume | `All Speakers`: Music.app sound volume; individual/custom zones: Music.app AirPlay device `sound volume` |
 | connect | Airfoil AppleScript | Airfoil AppleScript |
 | disconnect | Airfoil AppleScript | Airfoil AppleScript |
 

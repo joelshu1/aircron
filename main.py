@@ -54,15 +54,19 @@ def check_dependencies() -> None:
 
     # Soft checks for installed apps (do not fail hard; just warn)
     apps = {
-        "Airfoil": Path("/Applications/Airfoil.app"),
-        "Music": Path("/Applications/Music.app"),
-        "Spotify": Path("/Applications/Spotify.app"),
+        "Airfoil": [Path("/Applications/Airfoil.app")],
+        "Music": [Path("/System/Applications/Music.app"), Path("/Applications/Music.app")],
+        "Spotify": [Path("/Applications/Spotify.app")],
     }
-    for name, path in apps.items():
-        if path.exists():
-            logging.info(f"Found {name} at: {path}")
+    for name, paths in apps.items():
+        found_path = next((path for path in paths if path.exists()), None)
+        if found_path:
+            logging.info(f"Found {name} at: {found_path}")
         else:
-            logging.warning(f"{name} not found at expected path {path}; ensure it is installed")
+            expected_paths = ", ".join(str(path) for path in paths)
+            logging.warning(
+                f"{name} not found at expected path(s) {expected_paths}; ensure it is installed"
+            )
 
     if shutil.which("crontab") is None:
         raise RuntimeError("cron not found in PATH")

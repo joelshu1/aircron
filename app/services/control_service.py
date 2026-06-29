@@ -1,6 +1,5 @@
 import logging
 import re
-import shlex
 import subprocess
 from typing import Any, Dict
 
@@ -62,12 +61,12 @@ def _run_script(zone: str, action: str, arg1: str, service: str) -> None:
     zone = _validate_zone(zone)
 
     script = _get_script_path()
-    # Use shlex.quote to properly escape all string arguments for shell safety
-    cmd = [script, shlex.quote(zone), shlex.quote(action), shlex.quote(arg1 or ""), "", shlex.quote(service)]
+    cmd = [script, zone, action, arg1 or "", "", service]
     logger.info(f"[control_service] Running: {cmd}")
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "Control command failed")
+        output = "\n".join(part for part in [result.stdout.strip(), result.stderr.strip()] if part)
+        raise RuntimeError(output or "Control command failed")
 
 
 def run_control_action(data: Dict[str, Any]) -> Dict[str, Any]:
